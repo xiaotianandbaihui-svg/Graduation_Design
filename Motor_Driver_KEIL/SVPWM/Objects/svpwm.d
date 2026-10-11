@@ -29,4 +29,6 @@
 .\objects\svpwm.o: .\Library\stm32f10x_usart.h
 .\objects\svpwm.o: .\Library\stm32f10x_wwdg.h
 .\objects\svpwm.o: .\Library\misc.h
+.\objects\svpwm.o: Hardware\tle5012b.h
 .\objects\svpwm.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
+.\objects\svpwm.o: .\System\Delay.h

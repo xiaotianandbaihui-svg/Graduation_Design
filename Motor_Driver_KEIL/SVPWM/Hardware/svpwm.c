@@ -3,13 +3,23 @@
 #include "stm32f10x_gpio.h"
 #include "stm32f10x_rcc.h"
 #include "stm32f10x_tim.h"
+#include "tle5012b.h"
 #include <math.h>
+#include "Delay.h"
 
-extern void Delay_us(uint32_t us);
-
+float zero_point_1=0,zero_point_2=0;//记录两个电机在磁编码器特定安装下的A相角度
+float first_mechanical_angle=0,second_mechanical_angle=0;//记录电机当前机械角度
+float electrical1=0,electrical2=0;//记录当前电机的电角度 [0°,360°)
 static TIM_TypeDef * const timer[2] = {TIM2, TIM4};
 static uint16_t period;
 static uint8_t ready, running[2];
+
+static float Wrap360(float angle)
+{
+    angle = fmodf(angle, 360.0f);
+    if (angle < 0.0f) angle += 360.0f;
+    return angle >= 360.0f ? 0.0f : angle;
+}
 
 /* 3PWM模式：INL=1时响应INH的PWM；INL=0时该相上下管均关闭。 */
 static void PhaseEnable(uint8_t id, BitAction state)
@@ -146,9 +156,7 @@ int SVPWM_Set(uint8_t id, float voltage_deg, uint16_t modulation)
         SVPWM_Stop(id);
         return 1;
     }
-
-    angle = fmodf(voltage_deg, 360.0f);
-    if (angle < 0.0f) angle += 360.0f;
+		angle=Wrap360(voltage_deg);
     angle *= 0.01745329252f;
     amplitude = (float)modulation * (0.57735026919f / SVPWM_MAX_MOD);
     alpha = amplitude * cosf(angle);
@@ -179,4 +187,26 @@ int SVPWM_Set(uint8_t id, float voltage_deg, uint16_t modulation)
         running[id] = 1u;
     }
     return 1;
+}
+void Motor_init()
+{
+	if (!SVPWM_Set(0, 0.0f, SVPWM_MAX_MOD/2) ||!SVPWM_Set(1, 0.0f, SVPWM_MAX_MOD/2)) return;
+	Delay_ms(500);
+	while(TLE5012B_ReadAngle(0,&zero_point_1)!=TLE_OK);
+	while(TLE5012B_ReadAngle(1,&zero_point_2)!=TLE_OK);
+	SVPWM_Stop(0);
+	SVPWM_Stop(1);
+	
+}
+
+void SVPWM_Update(int8_t dir1,int8_t dir2,uint16_t modulation_1,uint16_t modulation_2)
+{
+	while(TLE5012B_ReadAngle(0,&first_mechanical_angle)!=TLE_OK);
+	while(TLE5012B_ReadAngle(1,&second_mechanical_angle)!=TLE_OK);
+	
+	electrical1 = Wrap360(7.0f *(first_mechanical_angle - zero_point_1)+dir1*90);
+	SVPWM_Set(0,electrical1,modulation_1);
+	
+	electrical2 = Wrap360(7.0f *(second_mechanical_angle - zero_point_2)+dir2*90);
+	SVPWM_Set(1,electrical2,modulation_2);
 }

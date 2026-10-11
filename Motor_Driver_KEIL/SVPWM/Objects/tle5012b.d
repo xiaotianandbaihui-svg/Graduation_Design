@@ -29,3 +29,4 @@
 .\objects\tle5012b.o: .\Library\stm32f10x_usart.h
 .\objects\tle5012b.o: .\Library\stm32f10x_wwdg.h
 .\objects\tle5012b.o: .\Library\misc.h
+.\objects\tle5012b.o: .\System\Delay.h

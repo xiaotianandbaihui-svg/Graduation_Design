@@ -36,4 +36,8 @@ int SVPWM_Set(uint8_t id, float voltage_deg, uint16_t modulation);
 
 void SVPWM_Stop(uint8_t id); /* 指定一路INL全拉低，高阻；另一路可继续运行。 */
 
+void Motor_init(void);
+
+void SVPWM_Update(int8_t dir1,int8_t dir2,uint16_t modulation_1,uint16_t modulation_2);
+
 #endif

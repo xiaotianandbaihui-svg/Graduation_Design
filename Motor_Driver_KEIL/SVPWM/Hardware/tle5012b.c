@@ -2,7 +2,7 @@
 #include "stm32f10x.h"
 #include "stm32f10x_gpio.h"
 #include "stm32f10x_spi.h"
-
+#include "Delay.h"
 /* 仅限制等待次数，防止SPI异常时永久卡住，不是精确的微秒超时。 */
 #define SPI_WAIT_LIMIT 10000u
 
@@ -10,8 +10,7 @@
  * 实际延时会因循环开销而更长；不依赖SysTick、DWT或外部延时函数。 */
 static void SSC_Gap(void)
 {
-    uint32_t i;
-    for (i = 0; i < 72u; ++i) __NOP();
+    Delay_us(2);
 }
 
 static void CS(uint8_t id, int high)
@@ -191,11 +190,11 @@ TLE_Result TLE5012B_ReadAngularSpeed(uint8_t id, float *deg_per_s)
                 (128.0f / (float)angle_range) * 1000000.0f / (window * period_us);
     return TLE_OK;
 }
-
+float angle;
 TLE_Result TLE5012B_Init(uint8_t id)
 {
     uint16_t status;
-    float angle;
+
     TLE_Result result = TLE5012B_ReadReg(id, TLE_REG_STAT, &status);
     if (result != TLE_OK) return result;
     return TLE5012B_ReadAngle(id, &angle);/*如果没错误，就直接读取一次角度*/
