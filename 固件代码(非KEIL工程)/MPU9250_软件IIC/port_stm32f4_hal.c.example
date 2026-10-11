@@ -1,0 +1,58 @@
+/* 可选移植示例：STM32F407 + HAL，PB6=SCK，PB7=SDA。
+ * 这是示例文件，不自动加入编译。如果已有SDA/SCK函数，不要重复定义。
+ * 在HAL_Init()、SystemClock_Config()之后调用Board_IIC_Init()。
+ * 两根线需要外部上拉到兼容的逻辑电源（F407侧通常为3.3V）。
+ */
+#include "stm32f4xx_hal.h"
+#include "iic_port.h"
+
+void Board_IIC_Init(void)
+{
+    GPIO_InitTypeDef gpio = {0};
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6 | GPIO_PIN_7, GPIO_PIN_SET);
+    gpio.Pin = GPIO_PIN_6 | GPIO_PIN_7;
+    gpio.Mode = GPIO_MODE_OUTPUT_OD;
+    gpio.Pull = GPIO_NOPULL;
+    gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(GPIOB, &gpio);
+
+    SystemCoreClockUpdate();
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+void SDA(uint8_t level)
+{
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7,
+                     level ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+void SCK(uint8_t level)
+{
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6,
+                     level ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+uint8_t SDA_Read(void)
+{
+    return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_7) == GPIO_PIN_SET;
+}
+
+uint8_t SCK_Read(void)
+{
+    return HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_6) == GPIO_PIN_SET;
+}
+
+void IIC_DelayUs(uint32_t us)
+{
+    /* DWT实际计数，不依赖空循环执行速度；要求CPU时钟>=1MHz且保持运行。
+     * 调试暂停和中断会延长延时。时钟改频后要更新SystemCoreClock。
+     */
+    uint32_t ticks_per_us = SystemCoreClock / 1000000u;
+    while (us-- > 0u) {
+        uint32_t start = DWT->CYCCNT;
+        while ((uint32_t)(DWT->CYCCNT - start) < ticks_per_us) {
+        }
+    }
+}
