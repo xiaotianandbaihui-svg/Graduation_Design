@@ -714,6 +714,26 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\Serial.h</FilePath>
             </File>
+            <File>
+              <FileName>svpwm.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\svpwm.c</FilePath>
+            </File>
+            <File>
+              <FileName>svpwm.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\svpwm.h</FilePath>
+            </File>
+            <File>
+              <FileName>tle5012b.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\tle5012b.c</FilePath>
+            </File>
+            <File>
+              <FileName>tle5012b.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\tle5012b.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

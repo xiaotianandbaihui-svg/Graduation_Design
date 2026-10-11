@@ -30,6 +30,8 @@
 ".\objects\key.o"
 ".\objects\oled.o"
 ".\objects\serial.o"
+".\objects\svpwm.o"
+".\objects\tle5012b.o"
 ".\objects\main.o"
 ".\objects\stm32f10x_it.o"
 --library_type=microlib --strict --scatter ".\Objects\Project.sct"
