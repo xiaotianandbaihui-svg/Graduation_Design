@@ -32,3 +32,7 @@
 .\objects\main.o: .\Hardware\OLED.h
 .\objects\main.o: .\Hardware\Serial.h
 .\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
+.\objects\main.o: .\Hardware\svpwm.h
+.\objects\main.o: .\Hardware\tle5012b.h
+.\objects\main.o: .\Hardware\balance_pid.h
+.\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h

@@ -3,6 +3,19 @@
 
 #include <stdint.h>
 
+/* TLE5012B芯片本身使用双向DATA。
+ * 1：接收时把PA7改为浮空输入，MISO/PA6仍负责读取（默认）。
+ * 0：全程保持PA7复用输出；只适用于已确认支持此方式的模块适配电路。
+ * 成品板有MOSI/MISO接口不代表可以省略释放；应以模块原理图为准。
+ * 使用1时要求模块在PA7释放后仍能把DATA送到PA6。
+ * 这不重配SPI1，只在传输中切换PA7的GPIO模式。 */
+#ifndef TLE5012B_RELEASE_MOSI
+#define TLE5012B_RELEASE_MOSI 1
+#endif
+#if TLE5012B_RELEASE_MOSI != 0 && TLE5012B_RELEASE_MOSI != 1
+#error TLE5012B_RELEASE_MOSI_must_be_0_or_1
+#endif
+
 /* 以下是寄存器编号，不是已经左移4位的命令字段。 */
 #define TLE_REG_STAT       0x00u
 #define TLE_REG_ACSTAT     0x01u
@@ -30,7 +43,7 @@ typedef enum {
  * 这些函数不配置SPI1、不占用定时器，也不执行任何电机控制。
  * 同一SPI总线不可被其他中断/任务同时使用。 */
 
-TLE_Result TLE5012B_Init(uint8_t id); /* 只清上电状态并确认能读取角度 */
+TLE_Result TLE5012B_Init(uint8_t id); /* 清上电状态，检查360度量程/DSPU并读角度 */
 TLE_Result TLE5012B_ReadReg(uint8_t id, uint8_t reg, uint16_t *value);
 TLE_Result TLE5012B_WriteReg(uint8_t id, uint8_t reg, uint16_t value);
 TLE_Result TLE5012B_ReadAngle(uint8_t id, float *degrees); /* [0, 360)，机械角 */

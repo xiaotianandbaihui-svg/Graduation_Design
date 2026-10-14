@@ -1,0 +1,12 @@
+.\port.o: ..\..\Source\portable\RVDS\ARM_CM3\port.c
+.\port.o: ..\..\Source\include\FreeRTOS.h
+.\port.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
+.\port.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+.\port.o: ..\CORTEX_STM32F103_Keil\FreeRTOSConfig.h
+.\port.o: ..\..\Source\include\projdefs.h
+.\port.o: ..\..\Source\include\portable.h
+.\port.o: ..\..\Source\include\deprecated_definitions.h
+.\port.o: ..\..\Source\include\../../Source/portable/RVDS/ARM_CM3/portmacro.h
+.\port.o: ..\..\Source\include\mpu_wrappers.h
+.\port.o: ..\..\Source\include\task.h
+.\port.o: ..\..\Source\include\list.h

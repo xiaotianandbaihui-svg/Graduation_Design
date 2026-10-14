@@ -6,8 +6,7 @@
 /* 仅限制等待次数，防止SPI异常时永久卡住，不是精确的微秒超时。 */
 #define SPI_WAIT_LIMIT 10000u
 
-/* 72MHz及以下至少执行72条NOP，满足SSC片选和方向切换的最小间隔。
- * 实际延时会因循环开销而更长；不依赖SysTick、DWT或外部延时函数。 */
+/* 使用已有微秒延时，满足SSC片选及DATA换向间隔。 */
 static void SSC_Gap(void)
 {
     Delay_us(2);
@@ -21,16 +20,18 @@ static void CS(uint8_t id, int high)
     else GPIO_ResetBits(port, pin);
 }
 
-/* TLE5012B的DATA为双向线。发命令/写数据时输出，接收时释放PA7。
- * 这只是通信过程中的引脚方向切换，不重新配置SPI1。
-* 要求模块把MOSI/MISO正确连接到DATA，详见README。当然，我们是逐飞现成模块，不用管那么多 */
+/* 双向DATA模式：发命令时驱动PA7，接收时释放PA7，让编码器驱动DATA。 */
 static void DATA_Output(int enable)
 {
+#if TLE5012B_RELEASE_MOSI
     GPIO_InitTypeDef gpio;
     gpio.GPIO_Pin = GPIO_Pin_7;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     gpio.GPIO_Mode = enable ? GPIO_Mode_AF_PP : GPIO_Mode_IN_FLOATING;
     GPIO_Init(GPIOA, &gpio);
+#else
+    (void)enable;
+#endif
 }
 
 /* 一个16位字的收发：直接使用SPI1标准库函数。 */
@@ -80,7 +81,7 @@ static TLE_Result Transfer(uint8_t id, uint16_t command, uint16_t *value)
 
     CS(id, 1);
     SSC_Gap();
-    //DATA_Output(1);
+    DATA_Output(1);
     CS(id, 0);
     SSC_Gap();
 
@@ -91,7 +92,7 @@ static TLE_Result Transfer(uint8_t id, uint16_t command, uint16_t *value)
         if (result != TLE_OK) goto finish;
     }
 
-    //DATA_Output(0);
+    DATA_Output(0);
     SSC_Gap();
     if (reading) {
         result = SPI1_Word(0xFFFFu, &data);  /* 读：发送占位字以产生16个时钟 */
@@ -120,7 +121,7 @@ static TLE_Result Transfer(uint8_t id, uint16_t command, uint16_t *value)
 finish:
     SSC_Gap();
     CS(id, 1);
-    //DATA_Output(0);
+    DATA_Output(0);
     SSC_Gap();
     return result;
 }
@@ -156,7 +157,7 @@ TLE_Result TLE5012B_ReadAngle(uint8_t id, float *degrees)
     if (degrees == 0) return TLE_ARGUMENT_ERROR;
     result = TLE5012B_ReadReg(id, TLE_REG_AVAL, &raw);
     if (result == TLE_OK)
-        *degrees = (float)(raw & 0x7FFFu) * (360.0f / 32768.0f);/*最高位是没用的位，因为角度寄存器就15位*/
+        *degrees = (float)(raw & 0x7FFFu) * (360.0f / 32768.0f);/* bit15为读取状态，不属于15位角度。 */
     return result;
 }
 
@@ -193,9 +194,16 @@ TLE_Result TLE5012B_ReadAngularSpeed(uint8_t id, float *deg_per_s)
 float angle;
 TLE_Result TLE5012B_Init(uint8_t id)
 {
-    uint16_t status;
-
+    uint16_t status, mod1, mod2;
     TLE_Result result = TLE5012B_ReadReg(id, TLE_REG_STAT, &status);
     if (result != TLE_OK) return result;
-    return TLE5012B_ReadAngle(id, &angle);/*如果没错误，就直接读取一次角度*/
+    result = TLE5012B_ReadReg(id, TLE_REG_MOD1, &mod1);
+    if (result != TLE_OK) return result;
+    result = TLE5012B_ReadReg(id, TLE_REG_MOD2, &mod2);
+    if (result != TLE_OK) return result;
+    /* 当前机械角换算要求完整360度量程（ANGRANGE=128），且DSPU未暂停。
+     * 只检查，不擅自改写模块的配置及配置区CRC。 */
+    if ((mod1 & 0x0010u) != 0u || ((mod2 & 0x7FF0u) >> 4) != 128u)
+        return TLE_CONFIG_ERROR;
+    return TLE5012B_ReadAngle(id, &angle);
 }

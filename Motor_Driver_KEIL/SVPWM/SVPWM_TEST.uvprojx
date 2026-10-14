@@ -734,6 +734,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\tle5012b.h</FilePath>
             </File>
+            <File>
+              <FileName>balance_pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\balance_pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>balance_pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\balance_pid.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

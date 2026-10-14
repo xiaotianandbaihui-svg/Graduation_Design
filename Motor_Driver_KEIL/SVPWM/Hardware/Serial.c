@@ -42,7 +42,7 @@ void Serial_Init(void)
 	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);			//开启串口接收数据的中断
 	
 	/*NVIC中断分组*/
-	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);			//配置NVIC为分组2
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);			//配置NVIC为分组2/*操作系统里，如果有这样的，就要注意了！！！*/
 	
 	/*NVIC配置*/
 	NVIC_InitTypeDef NVIC_InitStructure;					//定义结构体变量
