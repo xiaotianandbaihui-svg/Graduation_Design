@@ -172,7 +172,7 @@ static int16_t Signed16(uint8_t high, uint8_t low)
 }
 
 /* ---------- 接口 1：一次初始化加速度计、陀螺仪和磁力计 ---------- */
-uint8_t MPU9250_Init(void)
+__weak uint8_t MPU9250_Init(void)
 {
     uint8_t id, asa[3], i;
     ready = 0;
@@ -197,7 +197,8 @@ uint8_t MPU9250_Init(void)
 	/*--------------------------------------------------------------------*/
     ResetAttitude();
     SDA(1); SCK(1); Delay_ms(100);
-    if (!ReadRegs(MPU_ADDR, WHO_AM_I, &id, 1) || id != 0x71) return 0;
+		int8_t a=ReadRegs(MPU_ADDR, WHO_AM_I, &id, 1);
+    if (!a|| (id != 0x71 && id != 0x70)) return 0;
 
     if (!WriteReg(MPU_ADDR, PWR_MGMT_1, 0x80)) return 0; /* 复位 */
     Delay_ms(100);
@@ -213,8 +214,8 @@ uint8_t MPU9250_Init(void)
     if (!WriteReg(MPU_ADDR, SMPLRT_DIV,  0x04)) return 0; /* 内部采样 200Hz */
     if (!WriteReg(MPU_ADDR, INT_ENABLE,  0x00)) return 0; /* 不使用中断引脚 */
     if (!WriteReg(MPU_ADDR, INT_PIN_CFG, 0x02)) return 0; /* 磁力计旁路访问 */
-
-    if (!ReadRegs(MAG_ADDR, MAG_WIA, &id, 1) || id != 0x48) return 0;
+		int8_t b=ReadRegs(MAG_ADDR, MAG_WIA, &id, 1);
+    if (!b || id != 0x48) return 0;
     if (!WriteReg(MAG_ADDR, MAG_CNTL2, 0x01)) return 0;   /* 磁力计复位 */
     Delay_ms(1);
     if (!WriteReg(MAG_ADDR, MAG_CNTL1, 0x00)) return 0;

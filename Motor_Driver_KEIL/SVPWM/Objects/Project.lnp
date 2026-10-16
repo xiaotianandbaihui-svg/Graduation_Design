@@ -33,6 +33,7 @@
 ".\objects\svpwm.o"
 ".\objects\tle5012b.o"
 ".\objects\balance_pid.o"
+".\objects\can_pitch.o"
 ".\objects\main.o"
 ".\objects\stm32f10x_it.o"
 --library_type=microlib --strict --scatter ".\Objects\Project.sct"

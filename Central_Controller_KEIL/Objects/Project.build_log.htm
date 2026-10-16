@@ -16,21 +16,35 @@ Linker/Locator:  ArmLink.exe V5.06 update 6 (build 750)
 Library Manager: ArmAr.exe V5.06 update 6 (build 750)
 Hex Converter:   FromElf.exe V5.06 update 6 (build 750)
 CPU DLL:         SARMCM3.DLL V5.39.0.0
-Dialog DLL:      DCM.DLL V1.17.5.0
+Dialog DLL:      DARMSTM.DLL V1.69.1.0
 Target DLL:      STLink\ST-LINKIII-KEIL_SWO.dll V3.2.0.0
 Dialog DLL:      TCM.DLL V1.56.4.0
  
 <h2>Project:</h2>
 D:\1_All_Things_Is_Here\Graduation_Project-Design\All_of_My_Design\Central_Controller_KEIL\Central_Controller.uvprojx
-Project File Date:  10/14/2026
+Project File Date:  10/15/2026
 
 <h2>Output:</h2>
 *** Using Compiler 'V5.06 update 6 (build 750)', folder: 'D:\My_Keil\Keil_v5\ARM\ARMCC\Bin'
 Build target 'Target 1'
-compiling mpu9250_simple.c...
+compiling main.c...
+compiling mpu6500_spi.c...
+Hardware\mpu6500_spi.c(164): warning:  #177-D: variable "config"  was declared but never referenced
+      static const uint8_t config[][2] = {
+Hardware\mpu6500_spi.c(30): warning:  #177-D: variable "last_angle_us"  was declared but never referenced
+  static uint32_t last_angle_us;
+Hardware\mpu6500_spi.c(33): warning:  #177-D: variable "q"  was declared but never referenced
+  static float q[4];
+Hardware\mpu6500_spi.c(34): warning:  #177-D: variable "gyro_bias"  was declared but never referenced
+  static float gyro_bias[3], integral[3]; /* 原始值零偏；rad/s残余修正 */
+Hardware\mpu6500_spi.c(34): warning:  #177-D: variable "integral"  was declared but never referenced
+  static float gyro_bias[3], integral[3]; /* 原始值零偏；rad/s残余修正 */
+Hardware\mpu6500_spi.c(35): warning:  #177-D: function "CalibrateGyro"  was declared but never referenced
+  static uint8_t CalibrateGyro(void);
+Hardware\mpu6500_spi.c: 6 warnings, 0 errors
 linking...
-Program Size: Code=3556 RO-data=268 RW-data=52 ZI-data=1084  
-".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).
+Program Size: Code=8428 RO-data=268 RW-data=60 ZI-data=1100  
+".\Objects\Project.axf" - 0 Error(s), 6 Warning(s).
 
 <h2>Software Packages used:</h2>
 

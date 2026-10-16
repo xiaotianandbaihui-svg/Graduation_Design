@@ -18,7 +18,7 @@
           <Vendor>STMicroelectronics</Vendor>
           <PackID>Keil.STM32F1xx_DFP.2.4.1</PackID>
           <PackURL>https://www.keil.com/pack/</PackURL>
-          <Cpu>IRAM(0x20000000,0x5000) IROM(0x08000000,0x10000) CPUTYPE("Cortex-M3") CLOCK(12000000) ELITTLE</Cpu>
+          <Cpu>IRAM(0x20000000,0x00005000) IROM(0x08000000,0x00010000) CPUTYPE("Cortex-M3") CLOCK(12000000) ELITTLE</Cpu>
           <FlashUtilSpec></FlashUtilSpec>
           <StartupFile></StartupFile>
           <FlashDriverDll>UL2CM3(-S0 -C0 -P0 -FD20000000 -FC1000 -FN1 -FF0STM32F10x_128 -FS08000000 -FL020000 -FP0($$Device:STM32F103C8$Flash\STM32F10x_128.FLM))</FlashDriverDll>
@@ -111,8 +111,8 @@
         <DllOption>
           <SimDllName>SARMCM3.DLL</SimDllName>
           <SimDllArguments> -REMAP</SimDllArguments>
-          <SimDlgDll>DCM.DLL</SimDlgDll>
-          <SimDlgDllArguments>-pCM3</SimDlgDllArguments>
+          <SimDlgDll>DARMSTM.DLL</SimDlgDll>
+          <SimDlgDllArguments>-p STM32F103C8</SimDlgDllArguments>
           <TargetDllName>SARMCM3.DLL</TargetDllName>
           <TargetDllArguments></TargetDllArguments>
           <TargetDlgDll>TCM.DLL</TargetDlgDll>
@@ -134,11 +134,11 @@
             <RunIndependent>0</RunIndependent>
             <UpdateFlashBeforeDebugging>1</UpdateFlashBeforeDebugging>
             <Capability>1</Capability>
-            <DriverSelection>-1</DriverSelection>
+            <DriverSelection>4096</DriverSelection>
           </Flash1>
           <bUseTDR>1</bUseTDR>
           <Flash2>BIN\UL2CM3.DLL</Flash2>
-          <Flash3></Flash3>
+          <Flash3>"" ()</Flash3>
           <Flash4></Flash4>
           <pFcarmOut></pFcarmOut>
           <pFcarmGrp></pFcarmGrp>
@@ -723,6 +723,36 @@
               <FileName>mpu9250_simple.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Hardware\mpu9250_simple.h</FilePath>
+            </File>
+            <File>
+              <FileName>mpu9250_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\mpu9250_test.c</FilePath>
+            </File>
+            <File>
+              <FileName>mpu9250_test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\mpu9250_test.h</FilePath>
+            </File>
+            <File>
+              <FileName>iic_test.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\iic_test.c</FilePath>
+            </File>
+            <File>
+              <FileName>iic_test.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\iic_test.h</FilePath>
+            </File>
+            <File>
+              <FileName>mpu6500_spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\mpu6500_spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>mpu6500_spi.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\mpu6500_spi.h</FilePath>
             </File>
           </Files>
         </Group>

@@ -744,6 +744,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\balance_pid.h</FilePath>
             </File>
+            <File>
+              <FileName>can_pitch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\can_pitch.c</FilePath>
+            </File>
+            <File>
+              <FileName>can_pitch.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\can_pitch.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

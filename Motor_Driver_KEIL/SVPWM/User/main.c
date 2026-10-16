@@ -9,11 +9,11 @@
 //uint8_t RxData;			//定义用于接收串口数据的变量
 BalancePID for_balance;/*用于控制车俯仰角平衡的PID对象*/
 volatile uint8_t Its_Time_to_PID=0;//PID刷新标志
-volatile float the_angles[3]={0};//应当依次为Pitch、Roll、Yaw角,接收主控传来的角度信息
+volatile float the_angles[2]={0};//应当依次为Pitch、Yaw角,接收主控传来的角度信息
 volatile int8_t dir1=0,dir2=0;//标记运动方向 1：小车向前运动  0：小车向后运动
 volatile int8_t car_forward_electircal_forward_1=1,car_forward_electircal_forward_2=1;//记录车运行的方向和轮子转动的机械方向是否匹配，如果电角度增长方向对应轮子使得车前进的方向一致，那么就为1，反之为-1
 float pitch_target=0;
-uint8_t go=0;//轮足开始运行的总开关
+uint8_t go=0;//轮足开始运行的总开关，初始的时候为0
 
 
 int main(void)

@@ -28,8 +28,6 @@
 .\objects\main.o: .\Library\stm32f10x_usart.h
 .\objects\main.o: .\Library\stm32f10x_wwdg.h
 .\objects\main.o: .\Library\misc.h
-.\objects\main.o: .\System\Delay.h
-.\objects\main.o: .\Hardware\OLED.h
 .\objects\main.o: .\Hardware\Serial.h
 .\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
-.\objects\main.o: .\Hardware\mpu9250_simple.h
+.\objects\main.o: .\Hardware\mpu6500_spi.h
