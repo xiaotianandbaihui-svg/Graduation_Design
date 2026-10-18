@@ -51,15 +51,9 @@ void TIM2_IRQHandler(void)
 
 int main(void)
 {
-		MPU6500_Raw raw;
-    Serial_Init();
-    while (!MPU6500_Init()) {} /* 保持模块静止，完成启动零偏标定 */
-    IMU_TimerInit();
     while (1) {
         if (flag_to_update) {
             flag_to_update = 0; /* 先清零，保留读取/解算期间新到的请求 */
-						MPU6500_ReadRaw(&raw);
-                printf("%d,%d,%d\n", raw.accel[0], raw.accel[1], raw.accel[2]);
         }
     }
 }

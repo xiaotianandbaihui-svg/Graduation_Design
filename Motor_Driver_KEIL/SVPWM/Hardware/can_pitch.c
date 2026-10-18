@@ -7,9 +7,11 @@
 #include <math.h>
 
 extern float the_angles[2]; /* [0]=Pitch, [1]=Yaw */
+extern float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
+
 extern uint8_t Its_Time_to_PID;
 
-int CANPitch_Init(void)
+int CAN_Init_Together(void)
 {
     RCC_ClocksTypeDef clocks;
     GPIO_InitTypeDef gpio;
@@ -51,7 +53,7 @@ int CANPitch_Init(void)
     filter.CAN_FilterNumber = 0;
     filter.CAN_FilterMode = CAN_FilterMode_IdMask;
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
-    filter.CAN_FilterIdHigh = (uint16_t)(CAN_PITCH_RX_ID << 5);
+    filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_RX_ID << 5);
     filter.CAN_FilterIdLow = 0;
     filter.CAN_FilterMaskIdHigh = 0xFFE0u; /* 精确匹配11位标准ID */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
@@ -69,11 +71,12 @@ int CANPitch_Init(void)
     CAN_ITConfig(CAN1, CAN_IT_FMP0, ENABLE);
     return 1;
 }
-
-int CANPitch_Send(float pitch_deg, float yaw_deg)
+/*这个是发送当前的机体角度和两侧腿高的函数，这个其实不是本板子的应该的！但是，为了统一移植方便，就都写在这里了*/
+int CAN_Angle_and_LegHeight_Send(float pitch_deg, float yaw_deg,float left_leg_height,float right_leg_height)
 {
     CanTxMsg msg = {0};
     float angles[2] = {pitch_deg, yaw_deg};
+		float leg_height[2]={left_leg_height,right_leg_height};
     float scaled;
     uint16_t raw;
     uint8_t i;
@@ -86,14 +89,25 @@ int CANPitch_Send(float pitch_deg, float yaw_deg)
         msg.Data[2*i] = (uint8_t)raw;
         msg.Data[2*i+1] = (uint8_t)(raw >> 8);
     }
-    msg.StdId = CAN_PITCH_TX_ID;
+		
+    for (i = 0; i < 2; ++i) {
+			  if (!isfinite(leg_height[i]) || leg_height[i] < -327.68f ||
+					leg_height[i] > 327.67f) return 0;//这么做的一个主要原因还是保障强转的正确，不会导致范围不匹配
+        scaled = leg_height[i] * 100.0f;
+        raw = (uint16_t)(int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
+        msg.Data[2*(i+1)] = (uint8_t)raw;
+        msg.Data[2*(i+1)+1] = (uint8_t)(raw >> 8);
+    }
+		
+		
+    msg.StdId = CAN_ANGLE_LEGHEIGHT_TX_ID;
     msg.IDE = CAN_Id_Standard;
     msg.RTR = CAN_RTR_Data;
-    msg.DLC = 4;
+    msg.DLC = 8;
     return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
 }
 
-/*发送两个轮子的速度给主控，主控据此进行对于足端x坐标的PID控制*/
+/*发送两个轮子的速度给主控，主控据此进行对于足端x坐标的PID控制,这个才是主控板做的事情*/
 int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
 {
 	  CanTxMsg msg = {0};
@@ -101,7 +115,6 @@ int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
 		msg.IDE = CAN_Id_Standard;
     msg.RTR = CAN_RTR_Data;
     msg.DLC = 4;
-		uint8_t i;
 		uint16_t raw;
 		float scaled;
 		scaled = (*left_rpm) * 100.0f;
@@ -115,6 +128,8 @@ int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
     return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
 }
 
+
+/*接收数据中断，*/
 void USB_LP_CAN1_RX0_IRQHandler(void)
 {
     CanRxMsg msg;
@@ -124,15 +139,30 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
     /* FIFO最多3帧：本次处理入口时已有的帧，新到的留给下一次中断。 */
     while (count--) {
         CAN_Receive(CAN1, CAN_FIFO0, &msg); /* 读取并释放FIFO项 */
-        if (msg.StdId != CAN_PITCH_RX_ID || msg.IDE != CAN_Id_Standard ||
-            msg.RTR != CAN_RTR_Data || msg.DLC != 4) continue;
-        for (i = 0; i < 2; ++i) {
-            raw = (int32_t)((uint16_t)msg.Data[2*i] |
-                           ((uint16_t)msg.Data[2*i+1] << 8));
-            if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
-                 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
-            the_angles[i] = (float)raw / 100.0f;
-        }
+        if (msg.StdId == CAN_ANGLE_LEGHEIGHT_RX_ID && msg.IDE == CAN_Id_Standard &&
+            msg.RTR == CAN_RTR_Data && msg.DLC == 8)
+				{
+						/* Pitch、Yaw角度更新到缓存区 */
+						for (i = 0; i < 2; ++i) {
+								raw = (int32_t)((uint16_t)msg.Data[2*i] |
+															 ((uint16_t)msg.Data[2*i+1] << 8));
+								if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
+										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
+								the_angles[i] = (float)raw / 100.0f;
+						}
+						
+						
+						/* 更新左右两边的腿高 */
+						 for (i = 0; i < 2; ++i) {
+								raw = (int32_t)((uint16_t)msg.Data[2*(i+2)] |
+															 ((uint16_t)msg.Data[2*(i+2)+1] << 8));
+								if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
+										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
+								leg_height[i] = (float)raw / 100.0f;
+						}
+				}
+				if()
+				
         /* Pitch、Yaw全部更新后，才通知主循环处理。 */
         Its_Time_to_PID = 1;
     }

@@ -1,7 +1,7 @@
 Dependencies for Project 'RemoteController', Target 'TOUCH': (DO NOT MODIFY !)
 CompilerVersion: 5060750::V5.06 update 6 (build 750)::.\ARMCC
 F (.\main.c)(0x6ACCAA04)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\main.o --omf_browse ..\obj\main.crf --depend ..\obj\main.d)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -36,7 +36,7 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
@@ -122,7 +122,7 @@ I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
 F (..\HARDWARE\LED\led.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\led.o --omf_browse ..\obj\led.crf --depend ..\obj\led.d)
 I (..\HARDWARE\LED\led.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -159,7 +159,7 @@ I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
 F (..\HARDWARE\LCD\lcd.c)(0x6ACD0089)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\lcd.o --omf_browse ..\obj\lcd.crf --depend ..\obj\lcd.d)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -198,10 +198,10 @@ I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdlib.h)(0x5CEB79E2)
 I (..\HARDWARE\LCD\font.h)(0x5710F391)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\KEY\key.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\key.o --omf_browse ..\obj\key.crf --depend ..\obj\key.d)
 I (..\HARDWARE\KEY\key.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -236,10 +236,10 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\IIC\myiic.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\myiic.o --omf_browse ..\obj\myiic.crf --depend ..\obj\myiic.d)
 I (..\HARDWARE\IIC\myiic.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -274,11 +274,11 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\24CXX\24cxx.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\24cxx.o --omf_browse ..\obj\24cxx.crf --depend ..\obj\24cxx.d)
 I (..\HARDWARE\24CXX\24cxx.h)(0x5710F391)
 I (..\HARDWARE\IIC\myiic.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -313,10 +313,10 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\TOUCH\ctiic.c)(0x6135D5AC)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\ctiic.o --omf_browse ..\obj\ctiic.crf --depend ..\obj\ctiic.d)
 I (..\HARDWARE\TOUCH\ctiic.h)(0x53F6BB18)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -351,10 +351,10 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\TOUCH\gt9147.c)(0x5ECC7CC9)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\gt9147.o --omf_browse ..\obj\gt9147.crf --depend ..\obj\gt9147.d)
 I (..\HARDWARE\TOUCH\gt9147.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -395,13 +395,13 @@ I (..\HARDWARE\TOUCH\ft5206.h)(0x547D6C72)
 I (..\HARDWARE\TOUCH\ctiic.h)(0x53F6BB18)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\string.h)(0x5CEB79E2)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdlib.h)(0x5CEB79E2)
 F (..\HARDWARE\TOUCH\ott2001a.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\ott2001a.o --omf_browse ..\obj\ott2001a.crf --depend ..\obj\ott2001a.d)
 I (..\HARDWARE\TOUCH\ott2001a.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -442,10 +442,10 @@ I (..\HARDWARE\TOUCH\ft5206.h)(0x547D6C72)
 I (..\HARDWARE\TOUCH\ctiic.h)(0x53F6BB18)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 F (..\HARDWARE\TOUCH\ft5206.c)(0x62286C68)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\ft5206.o --omf_browse ..\obj\ft5206.crf --depend ..\obj\ft5206.d)
 I (..\HARDWARE\TOUCH\ft5206.h)(0x547D6C72)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -486,13 +486,13 @@ I (..\HARDWARE\TOUCH\gt9147.h)(0x5710F391)
 I (..\HARDWARE\TOUCH\ctiic.h)(0x53F6BB18)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\string.h)(0x5CEB79E2)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdlib.h)(0x5CEB79E2)
 F (..\HARDWARE\TOUCH\touch.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\touch.o --omf_browse ..\obj\touch.crf --depend ..\obj\touch.d)
 I (..\HARDWARE\TOUCH\touch.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -532,13 +532,13 @@ I (..\HARDWARE\TOUCH\gt9147.h)(0x5710F391)
 I (..\HARDWARE\TOUCH\ft5206.h)(0x547D6C72)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdlib.h)(0x5CEB79E2)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\math.h)(0x5CEB79D6)
 I (..\HARDWARE\24CXX\24cxx.h)(0x5710F391)
 I (..\HARDWARE\IIC\myiic.h)(0x5710F391)
-F (..\SYSTEM\delay\delay.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\delay.o --omf_browse ..\obj\delay.crf --depend ..\obj\delay.d)
-I (..\SYSTEM\delay\delay.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+F (..\SYSTEM\delay\delay.c)(0x6AD36B32)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\delay.o --omf_browse ..\obj\delay.crf --depend ..\obj\delay.d)
+I (..\SYSTEM\delay\delay.h)(0x6AD368C1)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -573,8 +573,16 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
+I (..\FreeRTOS\include\FreeRTOS.h)(0x6AA13196)
+I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stddef.h)(0x5CEB79E2)
+I (..\FreeRTOS\FreeRTOSConfig.h)(0x6ACDE961)
+I (..\FreeRTOS\include\projdefs.h)(0x64020E50)
+I (..\FreeRTOS\include\portable.h)(0x6AA2CDFD)
+I (..\FreeRTOS\include\deprecated_definitions.h)(0x64020E50)
+I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x64020E50)
+I (..\FreeRTOS\include\mpu_wrappers.h)(0x64020E50)
 F (..\SYSTEM\sys\sys.c)(0x5710F391)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\sys.o --omf_browse ..\obj\sys.crf --depend ..\obj\sys.d)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -609,8 +617,8 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
-F (..\SYSTEM\usart\usart.c)(0x5DF098C4)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\usart.o --omf_browse ..\obj\usart.crf --depend ..\obj\usart.d)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+F (..\SYSTEM\usart\usart.c)(0x6AD36EC6)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\usart.o --omf_browse ..\obj\usart.crf --depend ..\obj\usart.d)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
@@ -647,6 +655,16 @@ I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x5710F390)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x5710F390)
 I (..\SYSTEM\usart\usart.h)(0x5710F391)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
+I (..\FreeRTOS\include\FreeRTOS.h)(0x6AA13196)
+I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stddef.h)(0x5CEB79E2)
+I (..\FreeRTOS\FreeRTOSConfig.h)(0x6ACDE961)
+I (..\FreeRTOS\include\projdefs.h)(0x64020E50)
+I (..\FreeRTOS\include\portable.h)(0x6AA2CDFD)
+I (..\FreeRTOS\include\deprecated_definitions.h)(0x64020E50)
+I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x64020E50)
+I (..\FreeRTOS\include\mpu_wrappers.h)(0x64020E50)
+I (..\FreeRTOS\include\task.h)(0x64020E50)
+I (..\FreeRTOS\include\list.h)(0x64020E50)
 F (..\CORE\startup_stm32f40_41xxx.s)(0x6ACDE92D)(--cpu Cortex-M4.fp.sp -g --apcs=interwork -ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include--pd "__UVISION_VERSION SETA 539" --pd "STM32F407xx SETA 1"--list ..\obj\startup_stm32f40_41xxx.lst --xref -o ..\obj\startup_stm32f40_41xxx.o --depend ..\obj\startup_stm32f40_41xxx.d)
 F (..\FWLIB\src\misc.c)(0x5710F390)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\misc.o --omf_browse ..\obj\misc.crf --depend ..\obj\misc.d)
 I (..\FWLIB\inc\misc.h)(0x5710F390)
@@ -1020,7 +1038,7 @@ I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x64020E50)
 I (..\FreeRTOS\include\mpu_wrappers.h)(0x64020E50)
 I (..\FreeRTOS\include\task.h)(0x64020E50)
 I (..\FreeRTOS\include\list.h)(0x64020E50)
-F (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\lv_port_disp_template.c)(0x6ACDED66)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\lv_port_disp_template.o --omf_browse ..\obj\lv_port_disp_template.crf --depend ..\obj\lv_port_disp_template.d)
+F (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\lv_port_disp_template.c)(0x6ACDFCAB)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\lv_port_disp_template.o --omf_browse ..\obj\lv_port_disp_template.crf --depend ..\obj\lv_port_disp_template.d)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\lv_port_disp_template.h)(0x61F7D6C5)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../lvgl.h)(0x61F7D6C5)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/misc/lv_log.h)(0x61F7D6C5)
@@ -1145,7 +1163,7 @@ I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/freetype/lv
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/rlottie/lv_rlottie.h)(0x61F7D6C5)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/ffmpeg/lv_ffmpeg.h)(0x61F7D6C5)
 I (..\HARDWARE\LCD\lcd.h)(0x61C3E916)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (..\CORE\core_cmInstr.h)(0x5710F390)
@@ -1305,7 +1323,7 @@ I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/freetype/lv
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/rlottie/lv_rlottie.h)(0x61F7D6C5)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\../../src/extra/libs/ffmpeg/lv_ffmpeg.h)(0x61F7D6C5)
 I (..\HARDWARE\TOUCH\touch.h)(0x5710F391)
-I (..\SYSTEM\sys\sys.h)(0x5710F391)
+I (..\SYSTEM\sys\sys.h)(0x6AD368C1)
 I (..\USER\stm32f4xx.h)(0x5710F391)
 I (..\CORE\core_cm4.h)(0x5710F38F)
 I (..\CORE\core_cmInstr.h)(0x5710F390)

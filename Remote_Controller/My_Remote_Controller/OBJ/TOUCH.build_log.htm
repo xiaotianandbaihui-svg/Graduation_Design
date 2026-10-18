@@ -28,7 +28,14 @@ Project File Date:  10/13/2026
 *** Using Compiler 'V5.06 update 6 (build 750)', folder: 'D:\My_Keil\Keil_v5\ARM\ARMCC\Bin'
 Build target 'TOUCH'
 Note: source file '..\MIDDLEWARE\LVGL\GUI\lvgl\src\extra\themes\basic\lv_theme_basic.c' - object file renamed from '..\OBJ\lv_theme_basic.o' to '..\OBJ\lv_theme_basic_1.o'.
-"..\OBJ\TOUCH.axf" - 0 Error(s), 0 Warning(s).
+compiling usart.c...
+..\SYSTEM\usart\usart.c(118): warning:  #550-D: variable "Res"  was set but never used
+  	u16 Res;
+..\SYSTEM\usart\usart.c: 1 warning, 0 errors
+linking...
+Program Size: Code=259396 RO-data=24888 RW-data=720 ZI-data=128744  
+FromELF: creating hex file...
+"..\OBJ\TOUCH.axf" - 0 Error(s), 1 Warning(s).
 
 <h2>Software Packages used:</h2>
 
