@@ -4,8 +4,7 @@
 #include <stdint.h>
 
 /* 电驱端：STM32F103C8T6，PA11=RX、PA12=TX，500 kbit/s。 */
-#define CAN_ANGLE_LEGHEIGHT_RX_ID 0x101u  /* 主控 -> 电驱 */
-#define CAN_ANGLE_LEGHEIGHT_TX_ID 0x102u  /* 电驱 -> 主控 */
+#define CAN_ANGLE_LEGHEIGHT_ID 0x101u  /* 主控 -> 电驱 */
 #define CAN_SPEED_ID    0x103u
 /* 本模块定义这两个变量，main.c不要重复定义。
  * 同一报文更新[0]=Pitch、[1]=Yaw；电驱端不保存Roll，单位度。 */

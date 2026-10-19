@@ -36,3 +36,4 @@
 .\objects\main.o: .\Hardware\tle5012b.h
 .\objects\main.o: .\Hardware\balance_pid.h
 .\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
+.\objects\main.o: .\Hardware\can_pitch.h

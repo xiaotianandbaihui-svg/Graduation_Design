@@ -46,7 +46,7 @@ static LegIK_Result SolveSide(float upper, float lower, float dx, float dy,
 LegIK_Result LegIK_Solve(const LegIK_Geometry *g,
                          float x_mm, float y_mm, LegIK_Angles *out)
 {
-    float q1, q4, bx, by, dx, dy, u1x, u1y, u4x, u4y, cross;
+    float q1, q4, bx, by, dx, dy, u1x, u1y, u4x, u4y, cross, margin;
     LegIK_Result result;
     LegIK_Angles angles;
 
@@ -77,6 +77,15 @@ LegIK_Result LegIK_Solve(const LegIK_Geometry *g,
     cross = u1x * u4y - u1y * u4x;
     if (!isfinite(cross)) return LEG_IK_ARGUMENT_ERROR;
     if (fabsf(cross) < PARALLEL_SIN_EPS) return LEG_IK_SINGULAR;
+
+    /* 强制钻石形：B在A左下、D在E右下，P在B/D之间且低于二者。
+     * 排除边界附近的浮点误差；margin是数值容差，不是机械安全余量。 */
+    margin = LENGTH_EPS * fmaxf(g->l5_mm,
+                 fmaxf(fmaxf(g->l1_mm, g->l2_mm), fmaxf(g->l3_mm, g->l4_mm)));
+    if (bx >= -g->l5_mm * 0.5f - margin || dx <= g->l5_mm * 0.5f + margin ||
+        by <= margin || dy <= margin || y_mm <= fmaxf(by, dy) + margin ||
+        x_mm <= bx + margin || x_mm >= dx - margin)
+        return LEG_IK_POSTURE_ERROR;
 
     angles.q1_deg = Wrap360(q1 * RAD_TO_DEG);
     angles.q4_deg = Wrap360(q4 * RAD_TO_DEG);

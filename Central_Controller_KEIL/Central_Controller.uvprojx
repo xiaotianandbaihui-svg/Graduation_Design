@@ -670,39 +670,14 @@
           <GroupName>Hardware</GroupName>
           <Files>
             <File>
-              <FileName>LED.c</FileName>
+              <FileName>servo.c</FileName>
               <FileType>1</FileType>
-              <FilePath>.\Hardware\LED.c</FilePath>
+              <FilePath>.\Hardware\servo.c</FilePath>
             </File>
             <File>
-              <FileName>LED.h</FileName>
+              <FileName>servo.h</FileName>
               <FileType>5</FileType>
-              <FilePath>.\Hardware\LED.h</FilePath>
-            </File>
-            <File>
-              <FileName>Key.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\Key.c</FilePath>
-            </File>
-            <File>
-              <FileName>Key.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\Key.h</FilePath>
-            </File>
-            <File>
-              <FileName>OLED.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>.\Hardware\OLED.c</FilePath>
-            </File>
-            <File>
-              <FileName>OLED.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\OLED.h</FilePath>
-            </File>
-            <File>
-              <FileName>OLED_Font.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>.\Hardware\OLED_Font.h</FilePath>
+              <FilePath>.\Hardware\servo.h</FilePath>
             </File>
             <File>
               <FileName>Serial.c</FileName>
@@ -733,6 +708,36 @@
               <FileName>zf_device_imu963ra.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\Hardware\zf_device_imu963ra.h</FilePath>
+            </File>
+            <File>
+              <FileName>balance_pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\balance_pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>balance_pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\balance_pid.h</FilePath>
+            </File>
+            <File>
+              <FileName>can_pitch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\can_pitch.c</FilePath>
+            </File>
+            <File>
+              <FileName>can_pitch.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\can_pitch.h</FilePath>
+            </File>
+            <File>
+              <FileName>leg_ik.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\leg_ik.c</FilePath>
+            </File>
+            <File>
+              <FileName>leg_ik.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\leg_ik.h</FilePath>
             </File>
           </Files>
         </Group>

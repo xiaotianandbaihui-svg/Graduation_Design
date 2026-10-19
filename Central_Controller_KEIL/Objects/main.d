@@ -31,3 +31,8 @@
 .\objects\main.o: .\Hardware\Serial.h
 .\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\main.o: .\Hardware\mpu6500_spi.h
+.\objects\main.o: .\Hardware\can_pitch.h
+.\objects\main.o: .\Hardware\zf_device_imu963ra.h
+.\objects\main.o: .\Hardware\IMU.h
+.\objects\main.o: .\Hardware\leg_ik.h
+.\objects\main.o: .\Hardware\servo.h
