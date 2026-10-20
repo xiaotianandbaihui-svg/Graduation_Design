@@ -1,47 +1,43 @@
 #include "stm32f10x.h"
 #include "Serial.h"
-#include "mpu6500_spi.h"
-#include <stdio.h>
+#include "Delay.h"
 #include "can_pitch.h"
 #include "zf_device_imu963ra.h"
 #include "IMU.h"
 #include "leg_ik.h"
 #include "servo.h"
-#define IMU_PERIOD_MS  20u       /* 定时通知主循环；需要20ms就改为20u */
+#include "balance_pid.h"
+#include <math.h>
+
+#define IMU_PERIOD_MS FOOT_PID_PERIOD_MS
 #if IMU_PERIOD_MS < 1u || IMU_PERIOD_MS > 50u
 #error IMU_PERIOD_MS_must_be_1_to_50
 #endif
 
-/*转化前的原始数据*/
-extern int16_t imu963ra_gyro_x, imu963ra_gyro_y, imu963ra_gyro_z ;       // 三轴陀螺仪数据      GYRO (陀螺仪)
-extern int16_t imu963ra_acc_x,  imu963ra_acc_y,  imu963ra_acc_z;        // 三轴加速度计数据     ACC  (accelerometer 加速度计)
-extern int16_t imu963ra_mag_x,  imu963ra_mag_y,  imu963ra_mag_z;        // 三轴磁力计数据      MAG  (magnetometer 磁力计)
-/*转化后的数据*/
+/* 转换后的惯性传感器数据。 */
 float imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition;
-float imu963ra_acc_x_transition,  imu963ra_acc_y_transition,  imu963ra_acc_z_transition;
-float imu963ra_mag_x_transition,  imu963ra_mag_y_transition,  imu963ra_mag_z_transition;
+float imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition;
+float imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition;
 
-volatile uint8_t Its_Time_to_PID=0;/*定时器触发发送消息到驱动后，驱动回传角度数值，之后快速主控进行PID调控*/
-
-
-#define Central_Driver 1
-#if Central_Driver
-float angle[3];                      /* Pitch、Roll、Yaw，度；仅主循环写 */
-float Speed[2]={0};//双轮转速
-volatile uint8_t flag_to_update;/*到时间就发送角度*/
-volatile float current_leg_height[2]={0};
-volatile float current_leg_x[2]={0};
-volatile float current_target_angle_pitch_yaw[2]={0};/*当前目标角度，第一个是pitch 第二个是yaw*/
-extern LegIK_Geometry My_LegIK_Geometry;
-extern LegIK_Angles Left_LegIK_Angles ;
-extern LegIK_Angles Right_LegIK_Angles;
-#else
-volatile float the_angles[2]={0};//应当依次为Pitch、Yaw角,接收主控传来的角度信息
-volatile  float leg_height[2]={0};//标记腿高也就是y坐标的，由上位机发送而来
-volatile float target_angle[2]={0};
-#endif
-
-
+volatile uint8_t Its_Time_to_PID = 0; /* CAN中断：一帧左右轮速已更新 */
+volatile float Speed[2] = {0.0f, 0.0f};
+volatile uint8_t flag_to_update = 0;
+float angle[3]; /* [0]=Pitch，[1]=Yaw，[2]=Roll；仅主循环更新 */
+/* 下列坐标是成功下发的指令位置，不是实测位置；不能用(0,0)作为初始足端。 */
+volatile float current_leg_height[2] = {FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};
+volatile float current_leg_x[2] = {FOOT_INITIAL_X_MM, FOOT_INITIAL_X_MM};
+volatile float current_target_angle_pitch_yaw[2] = {0.0f, 0.0f};
+/* 轮足的当前状态：保留站立、跳跃、运动的状态定义。 */
+enum Global_State
+{
+    Stand_Stop,
+    Jumping,
+    Running,
+};
+FootPID for_foot_balance;
+/* 调试观察：0成功；-10计算输入异常；-11 CAN初始化失败；-12 IMU数据无效；
+ * -13 CAN邮箱提交失败；-14舵机初始化失败；其余负数见LegIK_Result。 */
+volatile int foot_control_status = 0;
 
 static void IMU_TimerInit(void)
 {
@@ -55,12 +51,12 @@ static void IMU_TimerInit(void)
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
     TIM_DeInit(TIM2);
     TIM_TimeBaseStructInit(&timer);
-    timer.TIM_Prescaler = (uint16_t)(tim_hz/1000000u-1u); /* 1us/计数 */
-    timer.TIM_Period = IMU_PERIOD_MS*1000u-1u;
+    timer.TIM_Prescaler = (uint16_t)(tim_hz / 1000000u - 1u);
+    timer.TIM_Period = IMU_PERIOD_MS * 1000u - 1u;
     TIM_TimeBaseInit(TIM2, &timer);
-    TIM_ClearITPendingBit(TIM2, TIM_IT_Update); /* 清除初始化UG产生的UIF */
+    TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
     flag_to_update = 0;
-    /* Serial_Init已设置分组2，TIM2优先于USART1接收中断。 */
+    /* Serial_Init已设置分组2。 */
     nvic.NVIC_IRQChannel = TIM2_IRQn;
     nvic.NVIC_IRQChannelPreemptionPriority = 0;
     nvic.NVIC_IRQChannelSubPriority = 0;
@@ -78,66 +74,120 @@ void TIM2_IRQHandler(void)
     }
 }
 
+static int TakeIMUTick(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    int pending;
+    __disable_irq();
+    pending = flag_to_update != 0;
+    flag_to_update = 0;
+    __set_PRIMASK(primask);
+    return pending;
+}
+
+static int ReadAttitude(void)
+{
+    imu963ra_get_acc();
+    if (imu963ra_spi_error) return 0;
+    imu963ra_get_gyro();
+    if (imu963ra_spi_error) return 0;
+    imu963ra_get_mag();
+    if (imu963ra_spi_error) return 0;
+    /* 原9轴解算会归一化这两个向量，零向量不能送入。 */
+    if ((imu963ra_acc_x == 0 && imu963ra_acc_y == 0 && imu963ra_acc_z == 0) ||
+        (imu963ra_mag_x == 0 && imu963ra_mag_y == 0 && imu963ra_mag_z == 0)) return 0;
+    imu963ra_acc_x_transition = imu963ra_acc_transition(imu963ra_acc_x);
+    imu963ra_acc_y_transition = imu963ra_acc_transition(imu963ra_acc_y);
+    imu963ra_acc_z_transition = imu963ra_acc_transition(imu963ra_acc_z);
+    imu963ra_gyro_x_transition = imu963ra_gyro_transition(imu963ra_gyro_x);
+    imu963ra_gyro_y_transition = imu963ra_gyro_transition(imu963ra_gyro_y);
+    imu963ra_gyro_z_transition = imu963ra_gyro_transition(imu963ra_gyro_z);
+    imu963ra_mag_x_transition = imu963ra_mag_transition(imu963ra_mag_x);
+    imu963ra_mag_y_transition = imu963ra_mag_transition(imu963ra_mag_y);
+    imu963ra_mag_z_transition = imu963ra_mag_transition(imu963ra_mag_z);
+    IMU_9Axis_Gyro_Acc_Mag(imu963ra_acc_x_transition, imu963ra_acc_y_transition,
+        imu963ra_acc_z_transition, imu963ra_gyro_x_transition, imu963ra_gyro_y_transition,
+        imu963ra_gyro_z_transition, imu963ra_mag_x_transition, imu963ra_mag_y_transition,
+        imu963ra_mag_z_transition, &angle[2], &angle[0], &angle[1], IMU_PERIOD_MS * 0.001f);
+    return isfinite(angle[0]) && isfinite(angle[1]) && isfinite(angle[2]);
+}
+
 int main(void)
 {
-	Servo_Init(SERVO_PERIOD_US); /* TIM3: no pulses until Servo_SetPulse/Servo_SetAngle. */
-	Serial_Init();/*来个串口，我板子上应该花了接口，先打开*/
-	IMU_TimerInit();/*来个定时老弟*/
-	while(imu963ra_init()){};/*陀螺仪初始化*/
-    while (1) {
-        if (flag_to_update) {
-            flag_to_update = 0; /* 先清零，保留读取/解算期间新到的请求 */
-					/*这里发送角度和腿长(腿长用于调整PID参数)，我们的驱动板主要是控制轮子转动实现车的转弯和平衡*/
-					/*解算并读取一次角度*/
-					imu963ra_get_acc();
-					imu963ra_get_gyro();
-					imu963ra_get_mag();
-					imu963ra_acc_x_transition=imu963ra_acc_transition(imu963ra_acc_x);
-					imu963ra_acc_y_transition=imu963ra_acc_transition(imu963ra_acc_y);
-					imu963ra_acc_z_transition=imu963ra_acc_transition(imu963ra_acc_z);
-					imu963ra_gyro_x_transition=imu963ra_gyro_transition(imu963ra_gyro_x);
-					imu963ra_gyro_y_transition=imu963ra_gyro_transition(imu963ra_gyro_y);
-					imu963ra_gyro_z_transition=imu963ra_gyro_transition(imu963ra_gyro_z);
-					imu963ra_mag_x_transition=imu963ra_mag_transition(imu963ra_mag_x);
-					imu963ra_mag_y_transition=imu963ra_mag_transition(imu963ra_mag_y);
-					imu963ra_mag_z_transition=imu963ra_mag_transition(imu963ra_mag_z);
-					IMU_9Axis_Gyro_Acc_Mag(imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition, 
-					imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition, 
-					imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition, 
-					&angle[2], &angle[0], &angle[1], IMU_PERIOD_MS*0.001);
-					
-					while(!CAN_Angle_and_LegHeight_Send_First_Package(angle[0],angle[1],current_leg_height[0],current_leg_height[1]));/*发送第一包数据*/
-					while(!CAN_Angle_and_LegHeight_Send_Second_Package(current_target_angle_pitch_yaw[0],current_target_angle_pitch_yaw[1]));/*发送第二包数据*/
-        }
-				
-				
-				if(Its_Time_to_PID)
-				{
-					Its_Time_to_PID=0;
-					/*根据回传的轮速，立刻进行PID控制，这个是控制足端x方向的*/
-					/*此处为PID代码，PID+其他代码在此处填写，得到应当输出的足端位置，emm，很朴素了。。*/
-					/*主要的，要根据轮速，控制腿的x坐标变化；其次，通过横滚角控制左右轮腿的高度*/
-					/*---------------------------------------------------------------------------*/
-					/*---------------------------PID代码至此开始----------------------------------*/
-					/*---------------------------------------------------------------------------*/
+    float wheel_rpm[2], old_x[2], old_y[2], next_x[2], next_y[2];
+    FootPID proposed;
+    LegIK_Result result;
+    unsigned i;
+    uint8_t control_due = 0;
 
-					
-					/*---------------------------------------------------------------------------*/
-					/*---------------------------PID代码至此结束----------------------------------*/
-					/*---------------------------------------------------------------------------*/
-					
-					/*左腿足端位置设置*/
-					LegIK_Solve(&My_LegIK_Geometry,
-                         current_leg_x[0],current_leg_height[0] , &Left_LegIK_Angles);
-					Servo_SetAngle(0,Servo_Bias_1-Left_LegIK_Angles.q1_deg);
-					Servo_SetAngle(1,Servo_Bias_2-Left_LegIK_Angles.q4_deg);
-					
-					/*右腿足端位置设置*/
-					LegIK_Solve(&My_LegIK_Geometry,
-                         current_leg_x[1],current_leg_height[1] , &Right_LegIK_Angles);
-					Servo_SetAngle(2,Servo_Bias_3-Left_LegIK_Angles.q1_deg);
-					Servo_SetAngle(3,Servo_Bias_4-Left_LegIK_Angles.q4_deg);
-					/*这里再次强调，我老是马虎接错线，这里一定要根据注释严格接线*/
-				}
+    Serial_Init();
+    FootPID_Init(&for_foot_balance);
+    if (Servo_Init(SERVO_PERIOD_US) != SERVO_OK) {
+        foot_control_status = -14;
+        while (1) {}
+    }
+    Leg_ResetFootPositionHistory();
+    for (i = 0; i < 2; ++i) {
+        next_x[i] = current_leg_x[i];
+        next_y[i] = current_leg_height[i];
+    }
+    result = Leg_SetFootPositions(next_x, next_y);
+    if (result != LEG_IK_OK) {
+        /* 先标定leg_ik.h的四个Servo_Bias；不把非法角度直接截成0/180度。 */
+        foot_control_status = result;
+        while (1) {}
+    }
+    Delay_ms(FOOT_INITIAL_SETTLE_MS);
+    while (imu963ra_init()) {}
+    if (!CAN_Init_Together()) {
+        foot_control_status = -11;
+        while (1) {}
+    }
+    IMU_TimerInit();
+
+    while (1) {
+        if (TakeIMUTick()) {
+            control_due = 0; /* 未收到上周期回包时，不补算多次PID。 */
+            if (ReadAttitude()) {
+                (void)CAN_TakeWheelSpeed(wheel_rpm); /* 丢弃已缓存的旧通知 */
+                /* 先姿态/腿高，后目标角；邮箱忙则跳过本次，避免堵住主循环。 */
+                if (CAN_Angle_and_LegHeight_Send_First_Package(angle[0], angle[1],
+                        current_leg_height[0], current_leg_height[1]) &&
+                    CAN_Angle_and_LegHeight_Send_Second_Package(
+                        current_target_angle_pitch_yaw[0], current_target_angle_pitch_yaw[1])) {
+                    control_due = 1;
+                } else {
+                    foot_control_status = -13;
+                }
+            } else {
+                foot_control_status = -12;
+            }
+        }
+
+        /* 定时器决定节拍，CAN回包触发足端控制；每个节拍至多执行一次。
+         * 当前协议没有序号，不能据此声称已严格匹配跨板的同周期报文。 */
+        if (control_due && CAN_TakeWheelSpeed(wheel_rpm)) {
+            control_due = 0;
+            for (i = 0; i < 2; ++i) {
+                old_x[i] = current_leg_x[i];
+                old_y[i] = current_leg_height[i];
+            }
+            proposed = for_foot_balance;
+            if (!FootPID_Update(&proposed, angle[2], wheel_rpm,
+                                old_x, old_y, next_x, next_y)) {
+                foot_control_status = -10;
+                continue;
+            }
+            /* Roll和两个独立轮速环全部算完，只从这里统一设置两条腿。 */
+            result = Leg_SetFootPositions(next_x, next_y);
+            foot_control_status = result;
+            if (result == LEG_IK_OK) {
+                for_foot_balance = proposed;
+                for (i = 0; i < 2; ++i) {
+                    current_leg_x[i] = next_x[i];
+                    current_leg_height[i] = next_y[i];
+                }
+            }
+        }
     }
 }

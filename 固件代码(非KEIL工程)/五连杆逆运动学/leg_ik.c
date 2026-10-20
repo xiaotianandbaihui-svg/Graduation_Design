@@ -1,6 +1,25 @@
 #include "leg_ik.h"
 #include <math.h>
 
+/*定义车的机械结构参数*/
+LegIK_Geometry My_LegIK_Geometry = {
+    .l1_mm = 60.0f,
+    .l2_mm = 90.0f,
+    .l3_mm = 90.0f,
+    .l4_mm = 60.0f,
+    .l5_mm = 37.5f
+};
+/*左轮的两个舵机计算出应该的角度*/
+LegIK_Angles Left_LegIK_Angles = {
+    .q1_deg = 0.0f,
+    .q4_deg = 0.0f
+};
+/*右轮的两个舵机计算出应该的角度*/
+LegIK_Angles Right_LegIK_Angles = {
+    .q1_deg = 0.0f,
+    .q4_deg = 0.0f
+};
+
 #define RAD_TO_DEG 57.29577951308232f
 #define LENGTH_EPS 0.00001f
 /* 从动杆夹角距0/180度不足约0.57度时，单精度角度误差会明显放大。 */

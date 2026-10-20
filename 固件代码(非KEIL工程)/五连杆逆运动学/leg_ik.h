@@ -52,22 +52,9 @@ LegIK_Result LegIK_Solve(const LegIK_Geometry *geometry,
                          float x_mm, float y_mm, LegIK_Angles *out);
 
 
-/*定义车的机械结构参数*/
-LegIK_Geometry My_LegIK_Geometry = {
-    .l1_mm = 60.0f,
-    .l2_mm = 90.0f,
-    .l3_mm = 90.0f,
-    .l4_mm = 60.0f,
-    .l5_mm = 37.5f
-};
-/*左轮的两个舵机计算出应该的角度*/
-LegIK_Angles Left_LegIK_Angles = {
-    .q1_deg = 0.0f,
-    .q4_deg = 0.0f
-};
-/*右轮的两个舵机计算出应该的角度*/
-LegIK_Angles Right_LegIK_Angles = {
-    .q1_deg = 0.0f,
-    .q4_deg = 0.0f
-};
+/* 全局对象仅在leg_ik.c定义，多个源文件包含本头文件不会重复定义。 */
+extern LegIK_Geometry My_LegIK_Geometry;
+extern LegIK_Angles Left_LegIK_Angles;
+extern LegIK_Angles Right_LegIK_Angles;
+
 #endif

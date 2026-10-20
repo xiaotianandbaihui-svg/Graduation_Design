@@ -15,6 +15,7 @@ extern float Speed[2];
 #else
 extern float the_angles[2]; /* [0]=Pitch, [1]=Yaw */
 extern float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
+extern float target_angle[2];
 #endif
 extern uint8_t Its_Time_to_PID;
 
@@ -55,6 +56,7 @@ int CAN_Init_Together(void)
     can.CAN_Prescaler = (uint16_t)prescaler;
     can.CAN_ABOM = ENABLE; /* 总线关闭后允许硬件恢复 */
     can.CAN_NART = ENABLE; /* 实时角度不自动重发旧帧，下一周期发送最新值，也就是说，现在不自动重传*/
+		can.CAN_TXFP = ENABLE;  // 同一控制器的发送邮箱按请求先后排序
     if (CAN_Init(CAN1, &can) != CAN_InitStatus_Success) return 0;
 
     filter.CAN_FilterNumber = 0;
@@ -62,7 +64,18 @@ int CAN_Init_Together(void)
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
     filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_ID << 5);
     filter.CAN_FilterIdLow = 0;
-    filter.CAN_FilterMaskIdHigh = 0xFFE0u; /* 精确匹配11位标准ID */
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配11位标准ID */
+    filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
+    filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
+    filter.CAN_FilterActivation = ENABLE;
+    CAN_FilterInit(&filter);
+
+		filter.CAN_FilterNumber = 1;
+    filter.CAN_FilterMode = CAN_FilterMode_IdMask;
+    filter.CAN_FilterScale = CAN_FilterScale_32bit;
+    filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_ID << 5);
+    filter.CAN_FilterIdLow = 0;
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配11位标准ID */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
     filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
     filter.CAN_FilterActivation = ENABLE;
@@ -102,8 +115,8 @@ int CAN_Angle_and_LegHeight_Send(float pitch_deg, float yaw_deg,float left_leg_h
 					leg_height[i] > 327.67f) return 0;//这么做的一个主要原因还是保障强转的正确，不会导致范围不匹配
         scaled = leg_height[i] * 100.0f;
         raw = (uint16_t)(int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
-        msg.Data[2*(i+1)] = (uint8_t)raw;
-        msg.Data[2*(i+1)+1] = (uint8_t)(raw >> 8);
+        msg.Data[2*(i+2)] = (uint8_t)raw;
+        msg.Data[2*(i+2)+1] = (uint8_t)(raw >> 8);
     }
 		
 		
@@ -130,11 +143,11 @@ int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
 		msg.Data[1] = (uint8_t)(raw >> 8);
 		scaled = (*right_rpm) * 100.0f;
 		raw = (uint16_t)(int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
-		msg.Data[0] = (uint8_t)raw;
-		msg.Data[1] = (uint8_t)(raw >> 8);
+		msg.Data[2] = (uint8_t)raw;
+		msg.Data[3] = (uint8_t)(raw >> 8);
     return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
 }
-
+static uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
 /*接收数据中断，*/
 void USB_LP_CAN1_RX0_IRQHandler(void)
 {
@@ -180,9 +193,11 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
 								leg_height[i] = (float)raw / 100.0f;
 						}
+						 if_We_Should_Infrom_Main_Function_to_PID|=0x01;
 				}
-				if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
-            msg.RTR == CAN_RTR_Data && msg.DLC == 8)
+				/*这里接收目标的目标的角度*/
+				if (msg.StdId == CAN_TARGET_ANGLE_ID && msg.IDE == CAN_Id_Standard &&
+            msg.RTR == CAN_RTR_Data && msg.DLC == 4)
 				{
 						/* Pitch、Yaw角度更新到缓存区 */
 						for (i = 0; i < 2; ++i) {
@@ -190,22 +205,16 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 															 ((uint16_t)msg.Data[2*i+1] << 8));
 								if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
 										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
-								the_angles[i] = (float)raw / 100.0f;
+								target_angle[i] = (float)raw / 100.0f;
 						}
+						if_We_Should_Infrom_Main_Function_to_PID|=0x02;
 						
-						
-						/* 更新左右两边的腿高 */
-						 for (i = 0; i < 2; ++i) {
-								raw = (int32_t)((uint16_t)msg.Data[2*(i+2)] |
-															 ((uint16_t)msg.Data[2*(i+2)+1] << 8));
-								if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
-										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
-								leg_height[i] = (float)raw / 100.0f;
-						}
 				}
-
 				#endif
-        /* Pitch、Yaw全部更新后，才通知主循环处理。 */
-    }
-        Its_Time_to_PID = 1;
+		}
+		if(if_We_Should_Infrom_Main_Function_to_PID==0x03)
+		{
+				Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
+				if_We_Should_Infrom_Main_Function_to_PID=0;
+		}
 }

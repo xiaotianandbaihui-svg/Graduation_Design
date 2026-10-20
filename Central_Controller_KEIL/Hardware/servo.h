@@ -45,4 +45,8 @@ Servo_Result Servo_SetPulse(uint8_t id, uint16_t pulse_us);
  */
 Servo_Result Servo_SetAngle(uint8_t id, float angle_deg);
 
+/* 同时提交四路目标；先检查全部参数，再写入同一组PWM预装载寄存器。
+ * 任一参数非法时四路均不修改；下一PWM更新事件统一生效。 */
+Servo_Result Servo_SetAngles(const float angle_deg[4]);
+
 #endif

@@ -43,77 +43,72 @@ static float PID_Step(PID *p, float error, int freeze)
 
 float PID_Update(PID *p, float error)
 {
-    return PID_Step(p, error, 0);/*freeze = 0则表示开启积分项不再积累(但是此时已有的积分值还是保留)，这说明PID_Update函数默认是打开积分积累的*/
+    return PID_Step(p, error, 0); /* freeze=0：允许积分 */
 }
 
-void Balance_Stop(BalancePID *b)
+void FootPID_Init(FootPID *p)
 {
-    b->running = 0u;
-    PID_Reset(&b->angle);
-    PID_Reset(&b->speed[0]);
-    PID_Reset(&b->speed[1]);
+    PID_Init(&p->roll, FOOT_ROLL_KP, 0.0f, 0.0f, FOOT_Y_STEP_MAX_MM);
+    PID_Init(&p->x[0], FOOT_X_KP_LEFT, 0.0f, 0.0f, FOOT_X_STEP_MAX_MM);
+    PID_Init(&p->x[1], FOOT_X_KP_RIGHT, 0.0f, 0.0f, FOOT_X_STEP_MAX_MM);
+    p->target_roll_deg = FOOT_TARGET_ROLL_DEG;
+    p->target_rpm[0] = FOOT_TARGET_RPM_LEFT;
+    p->target_rpm[1] = FOOT_TARGET_RPM_RIGHT;
 }
 
-#define Speed_limit  1000.0f /*限制不超过1000rpm，理论最大值是6000rpm*/
-#define Output_limit 1000.0f
-void Balance_Init(BalancePID *b)
+static float ClampRange(float x, float low, float high)
 {
-    PID_Init(&b->angle, 0.0f, 0.0f, 0.0f, Speed_limit);
-    PID_Init(&b->speed[0], 0.0f, 0.0f, 0.0f, Output_limit);
-    PID_Init(&b->speed[1], 0.0f, 0.0f, 0.0f, Output_limit);
-    b->upright_deg = 0.0f; /* 目标直立角 */
-    b->fall_deg = 60.0f;   /* 保留你设置的倾倒阈值 */
-    b->running = 0u;
+    return x < low ? low : (x > high ? high : x);
 }
 
-/* 配置只在Start时检查，不占每周期的计算路径。 */
-static int PID_ConfigOK(const PID *p)
+static int FootConfigOK(const PID *p)
 {
     return isfinite(p->kp) && isfinite(p->ki) && isfinite(p->kd) &&
            isfinite(p->limit) && p->limit > 0.0f;
 }
 
-int Balance_Start(BalancePID *b)
+int FootPID_Update(FootPID *p, float roll_deg, const float wheel_rpm[2],
+                   const float current_x[2], const float current_y[2],
+                   float next_x[2], float next_y[2])
 {
-    Balance_Stop(b);
-    if (!PID_ConfigOK(&b->angle) || !PID_ConfigOK(&b->speed[0]) ||
-        !PID_ConfigOK(&b->speed[1]) || b->speed[0].limit > 1000.0f ||
-        b->speed[1].limit > 1000.0f || !isfinite(b->upright_deg) ||
-        !isfinite(b->fall_deg) || b->fall_deg <= 0.0f) return 0;
-    b->running = 1u;
-    return 1;
-}
-
-int Balance_Update(BalancePID *b, float tilt_deg,
-                   float left_rpm, float right_rpm, int16_t command[2])
-{
-    float error =b->upright_deg-tilt_deg;
-    float target, di = b->angle.ki * error, u;
-    float measured[2] = {left_rpm, right_rpm};
-    int i, freeze;
-    if (!b->running || fabsf(error) > b->fall_deg) goto fail;
-
-    /* 内环上次饱和时，暂停外环同方向积分。 */
-    freeze = ((b->speed[0].output >= b->speed[0].limit ||
-               b->speed[1].output >= b->speed[1].limit) && di > 0.0f) ||
-             ((b->speed[0].output <= -b->speed[0].limit ||
-               b->speed[1].output <= -b->speed[1].limit) && di < 0.0f);
-    target = PID_Step(&b->angle, error, freeze);
-    if (!isfinite(target)) goto fail;
+    const int sign[2] = {FOOT_WHEEL_SIGN_LEFT, FOOT_WHEEL_SIGN_RIGHT};
+    FootPID state;
+    float x[2], y[2], error, dy, low, high, dx;
+    unsigned i;
+    if (!p || !wheel_rpm || !current_x || !current_y || !next_x || !next_y ||
+        !isfinite(roll_deg) || !isfinite(p->target_roll_deg) ||
+        !FootConfigOK(&p->roll) || !FootConfigOK(&p->x[0]) ||
+        !FootConfigOK(&p->x[1]) || !(FOOT_X_MIN_MM < FOOT_X_MAX_MM) ||
+        !(FOOT_Y_MIN_MM < FOOT_Y_MAX_MM) ||
+        !(FOOT_Y_STEP_MAX_MM > 0.0f) || !(FOOT_X_STEP_MAX_MM > 0.0f)) return 0;
     for (i = 0; i < 2; ++i) {
-        u = PID_Update(&b->speed[i], target - measured[i]);
-        if (!isfinite(u)) goto fail; /* 异常浮点不能转成整数命令 */
-        command[i] = (int16_t)(u >= 0.0f ? u + 0.5f : u - 0.5f);/*这里的±0.5f就是专门用于四舍五入的*/
+        if ((sign[i] != 1 && sign[i] != -1) || !isfinite(wheel_rpm[i]) ||
+            !isfinite(p->target_rpm[i]) ||
+            !(current_x[i] >= FOOT_X_MIN_MM && current_x[i] <= FOOT_X_MAX_MM) ||
+            !(current_y[i] >= FOOT_Y_MIN_MM && current_y[i] <= FOOT_Y_MAX_MM)) return 0;
     }
+    state = *p;
+    error = p->target_roll_deg - roll_deg;
+    if (fabsf(error) <= FOOT_ROLL_DEADBAND_DEG) error = 0.0f;
+    dy = PID_Update(&state.roll, error);
+    if (!isfinite(dy)) return 0;
+    dy = Limit(dy, FOOT_Y_STEP_MAX_MM);
+    /* 两侧共同限幅，避免单侧到限位后平均腿高继续漂移。 */
+    low = fmaxf(FOOT_Y_MIN_MM - current_y[0], current_y[1] - FOOT_Y_MAX_MM);
+    high = fminf(FOOT_Y_MAX_MM - current_y[0], current_y[1] - FOOT_Y_MIN_MM);
+    dy = ClampRange(dy, low, high);
+    y[0] = current_y[0] + dy;
+    y[1] = current_y[1] - dy;
+    for (i = 0; i < 2; ++i) {
+        error = p->target_rpm[i] - (float)sign[i] * wheel_rpm[i];
+        if (fabsf(error) <= FOOT_SPEED_DEADBAND_RPM) error = 0.0f;
+        dx = PID_Update(&state.x[i], error);
+        if (!isfinite(dx)) return 0;
+        dx = Limit(dx, FOOT_X_STEP_MAX_MM);
+        x[i] = ClampRange(current_x[i] + dx, FOOT_X_MIN_MM, FOOT_X_MAX_MM);
+    }
+    for (i = 0; i < 2; ++i) { next_x[i] = x[i]; next_y[i] = y[i]; }
+    *p = state;
     return 1;
-fail:
-    Balance_Stop(b);
-    command[0] = command[1] = 0;
-    return 0;
 }
 
-
-
-
-
-/*------------------------------------------------------------------------------*/

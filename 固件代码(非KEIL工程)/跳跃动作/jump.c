@@ -1,6 +1,17 @@
 #include "jump.h"
 #include "leg_ik.h"
 
+/* 保留逐飞原始读取函数；只有SPI读取成功才交付三个原始值。 */
+static uint8_t Jump_ReadAccel(int16_t raw[3])
+{
+    imu963ra_get_acc();
+    if (imu963ra_spi_error) return 0;
+    raw[0] = imu963ra_acc_x;
+    raw[1] = imu963ra_acc_y;
+    raw[2] = imu963ra_acc_z;
+    return 1;
+}
+
 static const LegIK_Geometry leg = JUMP_GEOMETRY;
 static const uint8_t servo_id[4] = JUMP_SERVO_IDS;
 static const int8_t direction[4] = JUMP_DIRECTION;
@@ -52,6 +63,7 @@ int8_t Jump_Start(uint32_t now_ms)
           JUMP_MID_MM > JUMP_BUFFER_MM && JUMP_HIGH_MM > JUMP_MID_MM) ||
         !isfinite(JUMP_BUFFER_MAX_MM_S) || !(JUMP_BUFFER_MAX_MM_S > 0) ||
         JUMP_BUFFER_MS == 0 || JUMP_SAMPLE_MS == 0 ||
+        !isfinite(JUMP_ACCEL_LSB_PER_G) || !(JUMP_ACCEL_LSB_PER_G > 0.0f) ||
         !Get_Angles(JUMP_X_MM, JUMP_LOW_MM, target[0]) ||
         !Get_Angles(JUMP_X_MM, JUMP_HIGH_MM, target[1]) ||
         !Get_Angles(JUMP_X_MM, JUMP_MID_MM, target[2]) ||

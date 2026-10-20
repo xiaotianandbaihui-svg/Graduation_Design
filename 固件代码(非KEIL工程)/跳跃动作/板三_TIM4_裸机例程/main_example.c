@@ -2,15 +2,7 @@
 #include "stm32f10x.h"
 #include "jump.h"
 #include "jump_tick.h"
-
-/* 唯一的板级初始化接口：接入你已有的IIC GPIO和延时初始化。
- * GPIO接线由你的板级代码决定；这里不猜测MPU实际接在哪两个脚。
- * 已有工程完成这些初始化时，可改为 ((void)0)。不在这里重设系统时钟。
- */
-#ifndef JUMP_EXAMPLE_PORT_INIT
-extern void Board_JumpPortInit(void);
-#define JUMP_EXAMPLE_PORT_INIT() Board_JumpPortInit()
-#endif
+#include "Serial.h"
 
 #define JUMP_CMD_NONE  0u
 #define JUMP_CMD_START 1u
@@ -27,11 +19,11 @@ volatile int8_t g_jump_state = JUMP_IDLE;
 static uint8_t TakeCommand(void)
 {
     uint8_t command;
-    uint32_t mask = __get_PRIMASK();
-    __disable_irq(); /* 保护“读取并清零”，避免清掉恰好到来的中断命令 */
-    command = g_jump_command;
-    g_jump_command = JUMP_CMD_NONE;
-    __set_PRIMASK(mask);
+    /* Cortex-M3独占访问：原子取出并清零，不关闭中断。
+     * 中断若在中途到来，独占写入失败后重读最新命令。 */
+    do {
+        command = __LDREXB(&g_jump_command);
+    } while (__STREXB(JUMP_CMD_NONE, &g_jump_command) != 0u);
     return command;
 }
 
@@ -41,12 +33,13 @@ int main(void)
     uint8_t command;
 
     /* 启动文件已经调用SystemInit；本例不重复调用。 */
+    Serial_Init(); /* 逐飞驱动初始化失败时可输出诊断 */
     if (!JumpTick_Init()) {
         g_jump_state = JUMP_ERROR;
         for (;;) { }
     }
-    JUMP_EXAMPLE_PORT_INIT();
-    if (Servo_Init(SERVO_PERIOD_US) != SERVO_OK || !MPU9250_Init()) {
+    if (Servo_Init(SERVO_PERIOD_US) != SERVO_OK ||
+        imu963ra_init() != 0u || imu963ra_spi_error) {
         g_jump_state = JUMP_ERROR;
         for (;;) { } /* 初始化失败，不执行跳跃 */
     }
@@ -83,7 +76,7 @@ int main(void)
         }
 
         /* 在这里处理按键、CAN等短任务，不能长时间Delay或忙等。
-         * IIC与Jump接口都在主循环调用；其他调腿算法不能同时覆盖舵机目标。
+         * SPI2与Jump接口都在主循环调用；其他调腿算法不能同时覆盖舵机目标。
          */
     }
 }

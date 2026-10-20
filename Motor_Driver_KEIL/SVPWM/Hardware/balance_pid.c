@@ -2,6 +2,9 @@
 #include <math.h>
 #include "tle5012b.h"
 #include "svpwm.h"
+
+extern volatile int8_t car_forward_electircal_forward_1,car_forward_electircal_forward_2;//记录车运行的方向和轮子转动的机械方向是否匹配，如果电角度增长方向对应轮子使得车前进的方向一致，那么就为1，反之为-1 
+
 static float Limit(float x, float limit)
 {
     return x > limit ? limit : (x < -limit ? -limit : x);
@@ -20,10 +23,18 @@ void PID_Init(PID *p, float kp, float ki, float kd, float limit)
 }
 
 /* 所有环统一用误差差分计算D项；freeze仅暂停积分。 */
-static float PID_Step(PID *p, float error, int freeze)
+static float PID_Step(PID *p, float error, int freeze,uint8_t if_angle_pid)
 {
     float difference = (p->kd != 0.0f && p->have_previous) ?
                        error - p->previous_error : 0.0f;
+		if(if_angle_pid)
+		{
+			if (difference > 180.0f)/*这里为了兼容俯仰角极限，不可以写180度，比如-90°然后目标90度(当然现实不可能，但是为了模型逻辑一致性，我觉得还是要这样)*/
+			difference -= 360.0f;
+			else if (difference < -180.0f)
+			difference += 360.0f;
+		}
+
     float pd = p->kp * error + p->kd * difference;
     float di = p->ki * error, next, u;
     if (p->ki == 0.0f) p->integral = 0.0f;
@@ -45,7 +56,7 @@ static float PID_Step(PID *p, float error, int freeze)
 
 float PID_Update(PID *p, float error)
 {
-    return PID_Step(p, error, 0);/*freeze = 0则表示开启积分项不再积累(但是此时已有的积分值还是保留)，这说明PID_Update函数默认是打开积分积累的*/
+    return PID_Step(p, error, 0,0);/*freeze = 0则表示开启积分项不再积累(但是此时已有的积分值还是保留)，这说明PID_Update函数默认是打开积分积累的*/
 }
 
 void Balance_Stop(BalancePID *b)
@@ -56,16 +67,26 @@ void Balance_Stop(BalancePID *b)
     PID_Reset(&b->speed[1]);
 }
 
-#define Speed_limit  1000.0f /*限制不超过1000rpm，理论最大值是6000rpm*/
-#define Output_limit 1000.0f
-void Balance_Init(BalancePID *b)
+void Balance_Init(uint8_t id,BalancePID *b)/*id==0 俯仰角PID  id==1 偏航角PID*/
 {
-    PID_Init(&b->angle, 0.0f, 0.0f, 0.0f, Speed_limit);
-    PID_Init(&b->speed[0], 0.0f, 0.0f, 0.0f, Output_limit);
-    PID_Init(&b->speed[1], 0.0f, 0.0f, 0.0f, Output_limit);
-    b->upright_deg = 0.0f; /* 目标直立角 */
-    b->fall_deg = 60.0f;   /* 保留你设置的倾倒阈值 */
-    b->running = 0u;
+    if(id==1)
+    {
+        PID_Init(&b->angle, 0.0f, 0.0f, 0.0f, Speed_limit);
+        PID_Init(&b->speed[0], 0.0f, 0.0f, 0.0f, Output_limit);
+        PID_Init(&b->speed[1], 0.0f, 0.0f, 0.0f, Output_limit);
+        b->upright_deg = 0.0f; /*设置目标角度为0度*/
+        b->fall_deg = 360.0f;   /* 设置倾倒阈值，Yaw360度，表示不倾倒 */
+        b->running = 0u;
+    }
+    else if(id==0)
+    {
+        PID_Init(&b->angle, 0.0f, 0.0f, 0.0f, Output_limit);
+        PID_Init(&b->speed[0], 0.0f, 0.0f, 0.0f, Output_limit);//这句代码在Pitch控制里无效，只是为了过后面的PID_ConfigOK函数和Balance_Start函数与保持统一
+        PID_Init(&b->speed[1], 0.0f, 0.0f, 0.0f, Output_limit);//这句代码在Pitch控制里无效，只是为了过后面的PID_ConfigOK函数和Balance_Start函数与保持统一
+        b->upright_deg = 0.0f; /* 设置目标角度为0度 */
+        b->fall_deg = 60.0f;   /* 设置倾倒阈值 */
+        b->running = 0u;
+    }
 }
 
 /* 配置只在Start时检查，不占每周期的计算路径。 */
@@ -87,27 +108,48 @@ int Balance_Start(BalancePID *b)
 }
 
 int Balance_Update(BalancePID *b, float tilt_deg,
-                   float left_rpm, float right_rpm, int16_t command[2])
+	float left_rpm, float right_rpm, int16_t command[2],uint8_t Pitch_or_Yaw)
 {
     float error =b->upright_deg-tilt_deg;
-    float target, di = b->angle.ki * error, u;
-    float measured[2] = {left_rpm, right_rpm};
-    int i, freeze;
-    if (!b->running || fabsf(error) > b->fall_deg) goto fail;
+    if (error > 180.0f)/*这里为了兼容俯仰角极限，不可以写180度，比如-90°然后目标90度(当然现实不可能，但是为了模型逻辑一致性，我觉得还是要这样)*/
+        error -= 360.0f;
+    else if (error < -180.0f)
+        error += 360.0f;
+        float target, di = b->angle.ki * error, u;     
+   if(Pitch_or_Yaw==1)
+   {     
 
-    /* 内环上次饱和时，暂停外环同方向积分。 */
-    freeze = ((b->speed[0].output >= b->speed[0].limit ||
-               b->speed[1].output >= b->speed[1].limit) && di > 0.0f) ||
-             ((b->speed[0].output <= -b->speed[0].limit ||
-               b->speed[1].output <= -b->speed[1].limit) && di < 0.0f);
-    target = PID_Step(&b->angle, error, freeze);
-    if (!isfinite(target)) goto fail;
-    for (i = 0; i < 2; ++i) {
-        u = PID_Update(&b->speed[i], target - measured[i]);
+            float measured[2] = {
+        car_forward_electircal_forward_1 * left_rpm,
+        car_forward_electircal_forward_2 * right_rpm
+            };    
+            int freeze;
+        if (!b->running || fabsf(error) > b->fall_deg) goto fail;
+
+        /* 内环上次饱和时，暂停外环同方向积分。 */
+        freeze = ((b->speed[0].output >= b->speed[0].limit ||
+                b->speed[1].output >= b->speed[1].limit) && di > 0.0f) ||
+                ((b->speed[0].output <= -b->speed[0].limit ||
+                b->speed[1].output <= -b->speed[1].limit) && di < 0.0f);
+        target = PID_Step(&b->angle, error, freeze,1);
+        if (!isfinite(target)) goto fail;
+
+        u = PID_Update(&b->speed[0], target - (measured[0]-measured[1]));
         if (!isfinite(u)) goto fail; /* 异常浮点不能转成整数命令 */
-        command[i] = (int16_t)(u >= 0.0f ? u + 0.5f : u - 0.5f);/*这里的±0.5f就是专门用于四舍五入的*/
+        command[0] = (int16_t)(u >= 0.0f ? u + 0.5f : u - 0.5f);/*这里的±0.5f就是专门用于四舍五入的*/
+        command[1]=-command[0];
+
+        return 1;
     }
-    return 1;
+    else if(Pitch_or_Yaw==0)
+    {
+        if (!b->running || fabsf(error) > b->fall_deg ) goto fail;
+        u=PID_Step(&b->angle,error, 0,1);/*最后的1代表这是角度PID*/
+        if (!isfinite(u)) goto fail; /* 异常浮点不能转成整数命令 */
+        command[0]=command[1]=(int16_t)(u >= 0.0f ? u + 0.5f : u - 0.5f);/*这里的±0.5f就是专门用于四舍五入的*/
+        return 1;
+    }
+
 fail:
     Balance_Stop(b);
     command[0] = command[1] = 0;
@@ -119,20 +161,11 @@ fail:
 
 
 /*------------------------------------------------------------------------------*/
-/*这里集中读取角速度和俯仰角，用于后续俯仰角控制*/
-extern float the_angles[3];
-int Balance_ReadPitch(float* pitch)
-{
-	*pitch = the_angles[0];
-	return 1;//返回Pitch角
-}
-
-int Balance_ReadFeedback(float *pitch, float *left_rpm, float *right_rpm)
+int Balance_ReadFeedback(float *left_rpm, float *right_rpm)
 {
     float left_dps, right_dps;
 
-    if (!Balance_ReadPitch(pitch) ||
-        TLE5012B_ReadAngularSpeed(0, &left_dps) != TLE_OK ||
+    if (TLE5012B_ReadAngularSpeed(0, &left_dps) != TLE_OK ||
         TLE5012B_ReadAngularSpeed(1, &right_dps) != TLE_OK)
         return 0;
 

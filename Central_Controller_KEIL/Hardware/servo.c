@@ -104,3 +104,26 @@ Servo_Result Servo_SetAngle(uint8_t id, float angle_deg)
 
     return Servo_SetPulse(id, (uint16_t)(pulse_us + 0.5f)); /* 四舍五入到整数微秒 */
 }
+
+Servo_Result Servo_SetAngles(const float angle_deg[4])
+{
+    uint16_t pulse[4];
+    unsigned i;
+    if (frame_us == 0u) return SERVO_NOT_READY;
+    if (!angle_deg || frame_us <= SERVO_MAX_PULSE_US) return SERVO_ARGUMENT_ERROR;
+    for (i = 0; i < 4; ++i) {
+        float a = angle_deg[i];
+        if (!(a >= 0.0f && a <= SERVO_MAX_ANGLE_DEG)) return SERVO_ARGUMENT_ERROR;
+        pulse[i] = (uint16_t)((float)SERVO_MIN_PULSE_US +
+                   (float)(SERVO_MAX_PULSE_US - SERVO_MIN_PULSE_US) *
+                   a / SERVO_MAX_ANGLE_DEG + 0.5f);
+    }
+    /* 暂停预装载转移，避免四路写到一半恰逢PWM周期边界。 */
+    TIM_UpdateDisableConfig(TIM3, ENABLE);
+    TIM_SetCompare1(TIM3, pulse[0]);
+    TIM_SetCompare2(TIM3, pulse[1]);
+    TIM_SetCompare3(TIM3, pulse[2]);
+    TIM_SetCompare4(TIM3, pulse[3]);
+    TIM_UpdateDisableConfig(TIM3, DISABLE);
+    return SERVO_OK;
+}

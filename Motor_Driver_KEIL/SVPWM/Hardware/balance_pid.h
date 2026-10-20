@@ -2,6 +2,8 @@
 #define BALANCE_PID_H
 
 #include <stdint.h>
+#define Speed_limit  1000.0f /*限制不超过1000rpm，理论最大值是6000rpm*/
+#define Output_limit 1000.0f /*输出力矩比例分子的限幅*/
 
 /* 固定周期PID：时间因子并入参数，不再传dt。
  * I += ki*error；差分D = kd*(error-previous_error)。 */
@@ -33,7 +35,7 @@ typedef struct {
  * 增益默认0，由你按固定控制周期整定；所有对象指针须有效。
  * Start只在启动时检查配置，更新时不重复扫描配置。
  * 修改参数请在停止状态进行，之后重新Start。 */
-void Balance_Init(BalancePID *b);
+void Balance_Init(uint8_t id,BalancePID *b);/*id==0 俯仰角PID  id==1 偏航角PID*/
 int Balance_Start(BalancePID *b);  /* 清状态并启动，1成功/0配置错误 */
 void Balance_Stop(BalancePID *b);  /* 只停运算，实际电机仍需停止命令 */
 
@@ -45,8 +47,7 @@ void Balance_Stop(BalancePID *b);  /* 只停运算，实际电机仍需停止命
  * 返回1成功；未启动/倾倒/异常结果返回0，清零两路并停止此实例。
  * b和command须有效；本次读取失败不要复用旧传感器数据。 */
 int Balance_Update(BalancePID *b, float tilt_deg,
-                   float left_rpm, float right_rpm, int16_t command[2]);
-
-int Balance_ReadFeedback(float *pitch, float *left_rpm, float *right_rpm);
+	float left_rpm, float right_rpm, int16_t command[2],uint8_t Pitch_or_Yaw);
+int Balance_ReadFeedback(float *left_rpm, float *right_rpm);
 #endif
 

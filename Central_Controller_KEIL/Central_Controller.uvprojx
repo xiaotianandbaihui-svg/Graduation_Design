@@ -739,6 +739,16 @@
               <FileType>5</FileType>
               <FilePath>.\Hardware\leg_ik.h</FilePath>
             </File>
+            <File>
+              <FileName>jump.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\jump.c</FilePath>
+            </File>
+            <File>
+              <FileName>jump.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\jump.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

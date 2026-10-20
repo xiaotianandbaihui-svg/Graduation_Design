@@ -1,10 +1,22 @@
 #ifndef LEG_IK_H
 #define LEG_IK_H
 /*四个舵机偏置角度*/
-#define Servo_Bias_1 0.0f  /*小车前进方向俯视图，左上舵机*/
+#ifndef Servo_Bias_1
+#define Servo_Bias_1 0.0f  /*小车前进方向俯视图，左上舵机；待实测标定*/
+#endif
+#ifndef Servo_Bias_2
 #define Servo_Bias_2 0.0f  /*小车前进方向俯视图，左下舵机*/
+#endif
+#ifndef Servo_Bias_3
 #define Servo_Bias_3 0.0f  /*小车前进方向俯视图，右上舵机*/
+#endif
+#ifndef Servo_Bias_4
 #define Servo_Bias_4 0.0f  /*小车前进方向俯视图，右下舵机*/
+#endif
+
+#ifndef FOOT_SERVO_STEP_MAX_DEG
+#define FOOT_SERVO_STEP_MAX_DEG 3.0f /* 每次四路各自的最大指令角变化；20ms带载实测后修改 */
+#endif
 
 /* 同一条腿的机构：A--B--P--D--E--A。
  * A、E是机身上的固定舵机轴；P是两根从动杆的交点（假定也是轮轴）。
@@ -28,7 +40,9 @@ typedef enum {
     LEG_IK_ARGUMENT_ERROR = -1,
     LEG_IK_UNREACHABLE = -2,
     LEG_IK_SINGULAR = -3,
-    LEG_IK_POSTURE_ERROR = -4 /* 几何可达，但不符合要求的钻石姿态 */
+    LEG_IK_POSTURE_ERROR = -4, /* 几何可达，但不符合要求的钻石姿态 */
+    LEG_IK_SERVO_ERROR = -5,
+    LEG_IK_STEP_ERROR = -6
 } LegIK_Result;
 
 /*五连杆结构图
@@ -51,6 +65,17 @@ typedef enum {
 
 LegIK_Result LegIK_Solve(const LegIK_Geometry *geometry,
                          float x_mm, float y_mm, LegIK_Angles *out);
+
+/* 统一设置左右足端：两腿分别逆解，沿用 servo=Servo_Bias-q 的安装映射。
+ * 先验证全部四路再统一下发；右腿使用右腿逆解结果。
+ * 超过单次舵机角变化限值时，缩小整组x/y增量并重新逆解，最多10次。
+ * 成功返回LEG_IK_OK，x/y回写实际下发的指令坐标；失败不修改数组或历史。
+ * 首次调用没有实际角度反馈，直接设置合法初始点，不保证20ms到位。
+ * 必须先Servo_Init，仅主循环调用；不要与Jump等其他舵机控制器同时运行。
+ * 这些坐标是指令位置，不能当作已经到位的实测位置。 */
+LegIK_Result Leg_SetFootPositions(float x_mm[2], float y_mm[2]);
+/* Servo_Init后或其他控制器接管过舵机后调用；下一次调用重新建立初始指令。 */
+void Leg_ResetFootPositionHistory(void);
 
 
 #endif
