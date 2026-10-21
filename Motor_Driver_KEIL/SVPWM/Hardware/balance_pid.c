@@ -161,7 +161,7 @@ fail:
 
 
 /*------------------------------------------------------------------------------*/
-int Balance_ReadFeedback(float *left_rpm, float *right_rpm)
+int Balance_ReadFeedback(float *left_rpm, float *right_rpm)/*这里传回的转速是和电角度正方向一致的（不一定是和机械运动方向一致）*/
 {
     float left_dps, right_dps;
 

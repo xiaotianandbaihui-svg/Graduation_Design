@@ -169,52 +169,61 @@ int CAN_Angle_and_LegHeight_Send_Second_Package(float target_pitch_deg, float ta
 }
 
 
-/* 电驱端回传轮速的复用接口；主控接收后据此控制足端x。 */
+/*发送两个轮子的速度给主控，主控据此进行对于足端x坐标的PID控制,这个才是主控板做的事情*/
 int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
 {
-	  CanTxMsg msg = {0};
-		msg.StdId =CAN_SPEED_ID;
-		msg.IDE = CAN_Id_Standard;
+    CanTxMsg msg = {0};
+    msg.StdId =CAN_SPEED_ID;
+    msg.IDE = CAN_Id_Standard;
     msg.RTR = CAN_RTR_Data;
-    msg.DLC = 4;
-		uint16_t raw;
-		float scaled;
-		scaled = (*left_rpm) * 100.0f;
-		raw = (uint16_t)(int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
-		msg.Data[0] = (uint8_t)raw;
-		msg.Data[1] = (uint8_t)(raw >> 8);
-		scaled = (*right_rpm) * 100.0f;
-		raw = (uint16_t)(int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
-		msg.Data[2] = (uint8_t)raw;
-		msg.Data[3] = (uint8_t)(raw >> 8);
+    msg.DLC = 8;
+    int32_t raw;
+    float scaled;
+    scaled = (*left_rpm) * 100.0f;
+    raw = (int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
+    msg.Data[0] = (uint8_t)raw;
+    msg.Data[1] = (uint8_t)(raw >> 8);
+    msg.Data[2] = (uint8_t)(raw >> 16);
+    msg.Data[3] = (uint8_t)(raw >> 24);
+    scaled = (*right_rpm) * 100.0f;
+    raw = (int32_t)(scaled + (scaled >= 0 ? 0.5f : -0.5f));
+    msg.Data[4] = (uint8_t)raw;
+    msg.Data[5] = (uint8_t)(raw >> 8);
+    msg.Data[6] = (uint8_t)(raw >> 16);
+    msg.Data[7] = (uint8_t)(raw >> 24);
     return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
 }
-
 static uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
+uint32_t volatile CAN_Time_Out_Counter=0;/*CAN超时计数器*/
 /*接收数据中断，*/
 void USB_LP_CAN1_RX0_IRQHandler(void)
 {
     CanRxMsg msg;
     int32_t raw;
-    uint8_t i;
+    uint8_t i;//用于for循环
     uint8_t count = CAN_MessagePending(CAN1, CAN_FIFO0);
     /* FIFO最多3帧：本次处理入口时已有的帧，新到的留给下一次中断。 */
     while (count--) {
         CAN_Receive(CAN1, CAN_FIFO0, &msg); /* 读取并释放FIFO项 */
 			#if Central_Driver
 				if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
-            msg.RTR == CAN_RTR_Data && msg.DLC == 4)
+            msg.RTR == CAN_RTR_Data && msg.DLC == 8)
 				{
 						for (i = 0; i < 2; ++i) {
-								raw = (int32_t)((uint16_t)msg.Data[2*i] |
-															 ((uint16_t)msg.Data[2*i+1] << 8));
-								if (raw & 0x8000)/*这里因为是把uint16_t转换为int32_t ，高位自动补的都是0*/
-										 raw |= 0xFFFF0000u;  /* 只把高16位置1，保留低16位 *//* 还原16位有符号补码 */
+								raw = (int32_t)((uint32_t)msg.Data[4*i] |
+															 ((uint32_t)msg.Data[4*i+1] << 8)|((uint32_t)msg.Data[4*i+2] << 16)|((uint32_t)msg.Data[4*i+3] << 24));
 								Speed[i] = (float)raw / 100.0f;
 						}
-					if_We_Should_Infrom_Main_Function_to_PID|=0x01;
+            if_We_Should_Infrom_Main_Function_to_PID|=0x01;
+
 				}
-				#else 
+        if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
+		    {
+                CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+				Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
+				if_We_Should_Infrom_Main_Function_to_PID=0;
+		    }
+		#else 
         if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 8)
 				{
@@ -253,11 +262,13 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 						if_We_Should_Infrom_Main_Function_to_PID|=0x02;
 						
 				}
-				#endif
 		}
-		if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
+		if(if_We_Should_Infrom_Main_Function_to_PID==0x03)
 		{
-				Its_Time_to_PID = 1; /* 主控已收到同一帧的左右轮速，通知主循环处理。 */
-				if_We_Should_Infrom_Main_Function_to_PID=0;
+            CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+            Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
+            if_We_Should_Infrom_Main_Function_to_PID=0;
 		}
+     #endif
+	}
 }

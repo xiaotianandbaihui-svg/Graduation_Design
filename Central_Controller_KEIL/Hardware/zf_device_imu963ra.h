@@ -222,4 +222,5 @@ uint8_t   imu963ra_init               (void);                                   
 #define imu963ra_mag_transition(mag_value)    ((float)mag_value / imu963ra_transition_factor[2])
 //================================================ÉùÃ÷ IMU963RA ÍØÕ¹º¯Êı================================================
 
+
 #endif

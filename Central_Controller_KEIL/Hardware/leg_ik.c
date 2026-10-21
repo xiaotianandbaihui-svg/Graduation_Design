@@ -1,6 +1,6 @@
 #include "leg_ik.h"
-#include "servo.h"
 #include <math.h>
+#include "stm32f10x.h"
 
 #define RAD_TO_DEG 57.29577951308232f
 #define LENGTH_EPS 0.00001f
@@ -115,74 +115,5 @@ LegIK_Result LegIK_Solve(const LegIK_Geometry *g,
     angles.q4_deg = Wrap360(q4 * RAD_TO_DEG);
     *out = angles;
     return LEG_IK_OK;
-}
-
-static uint8_t have_foot_command;
-static float last_x[2], last_y[2], last_servo[4];
-
-void Leg_ResetFootPositionHistory(void)
-{
-    have_foot_command = 0u;
-}
-
-static LegIK_Result SolveFeet(const float x[2], const float y[2],
-                              LegIK_Angles q[2], float command[4])
-{
-    const float bias[4] = {Servo_Bias_1, Servo_Bias_2, Servo_Bias_3, Servo_Bias_4};
-    LegIK_Result result;
-    unsigned i;
-    for (i = 0; i < 2; ++i) {
-        result = LegIK_Solve(&My_LegIK_Geometry, x[i], y[i], &q[i]);
-        if (result != LEG_IK_OK) return result;
-        command[2*i] = bias[2*i] - q[i].q1_deg;
-        command[2*i+1] = bias[2*i+1] - q[i].q4_deg;
-    }
-    for (i = 0; i < 4; ++i) {
-        if (!(command[i] >= 0.0f && command[i] <= SERVO_MAX_ANGLE_DEG))
-            return LEG_IK_SERVO_ERROR;
-    }
-    return LEG_IK_OK;
-}
-
-LegIK_Result Leg_SetFootPositions(float x_mm[2], float y_mm[2])
-{
-    float x[2], y[2], command[4], scale = 1.0f;
-    LegIK_Angles q[2];
-    LegIK_Result result = LEG_IK_STEP_ERROR;
-    unsigned i, attempt;
-    int step_ok;
-    if (!x_mm || !y_mm || !isfinite(FOOT_SERVO_STEP_MAX_DEG) ||
-        FOOT_SERVO_STEP_MAX_DEG <= 0.0f) return LEG_IK_ARGUMENT_ERROR;
-    for (i = 0; i < 2; ++i)
-        if (!isfinite(x_mm[i]) || !isfinite(y_mm[i])) return LEG_IK_ARGUMENT_ERROR;
-    for (attempt = 0; attempt < 10u; ++attempt, scale *= 0.5f) {
-        for (i = 0; i < 2; ++i) {
-            x[i] = have_foot_command ? last_x[i] + scale * (x_mm[i] - last_x[i]) : x_mm[i];
-            y[i] = have_foot_command ? last_y[i] + scale * (y_mm[i] - last_y[i]) : y_mm[i];
-        }
-        result = SolveFeet(x, y, q, command);
-        if (result != LEG_IK_OK) {
-            if (!have_foot_command) return result;
-            continue;
-        }
-        step_ok = 1;
-        if (have_foot_command) {
-            for (i = 0; i < 4; ++i)
-                if (fabsf(command[i] - last_servo[i]) > FOOT_SERVO_STEP_MAX_DEG)
-                    step_ok = 0;
-        }
-        if (!step_ok) { result = LEG_IK_STEP_ERROR; continue; }
-        if (Servo_SetAngles(command) != SERVO_OK) return LEG_IK_SERVO_ERROR;
-        for (i = 0; i < 2; ++i) {
-            x_mm[i] = last_x[i] = x[i];
-            y_mm[i] = last_y[i] = y[i];
-        }
-        for (i = 0; i < 4; ++i) last_servo[i] = command[i];
-        Left_LegIK_Angles = q[0];
-        Right_LegIK_Angles = q[1];
-        have_foot_command = 1u;
-        return LEG_IK_OK;
-    }
-    return result;
 }
 

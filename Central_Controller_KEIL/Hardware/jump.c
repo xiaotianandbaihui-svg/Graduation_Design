@@ -13,7 +13,7 @@ static uint8_t Jump_ReadAccel(int16_t raw[3])
 }
 
 static const LegIK_Geometry leg = JUMP_GEOMETRY;/*轮足的五连杆机械结构*/
-static const uint8_t servo_id[4] = JUMP_SERVO_IDS;
+static const uint8_t servo_id[4] = JUMP_SERVO_IDS;/*舵机编号*/
 static const int8_t direction[4] = JUMP_DIRECTION;
 static const float offset[4] = JUMP_OFFSET_DEG;
 static const float lower[4] = JUMP_MIN_DEG, upper[4] = JUMP_MAX_DEG;

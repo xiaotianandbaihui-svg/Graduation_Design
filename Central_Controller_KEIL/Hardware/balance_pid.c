@@ -53,7 +53,7 @@ void FootPID_Init(FootPID *p)
     PID_Init(&p->x[1], FOOT_X_KP_RIGHT, 0.0f, 0.0f, FOOT_X_STEP_MAX_MM);
     p->target_roll_deg = FOOT_TARGET_ROLL_DEG;
     p->target_rpm[0] = FOOT_TARGET_RPM_LEFT;
-    p->target_rpm[1] = FOOT_TARGET_RPM_RIGHT;
+    p->target_rpm[1] = FOOT_TARGET_RPM_RIGHT;//严格的，我们是要保障正常运动的时候，两轮的x轴坐标始终一致的/
 }
 
 static float ClampRange(float x, float low, float high)
@@ -92,8 +92,8 @@ int FootPID_Update(FootPID *p, float roll_deg, const float wheel_rpm[2],
     if (fabsf(error) <= FOOT_ROLL_DEADBAND_DEG) error = 0.0f;
     dy = PID_Update(&state.roll, error);
     if (!isfinite(dy)) return 0;
-    dy = Limit(dy, FOOT_Y_STEP_MAX_MM);
-    /* 两侧共同限幅，避免单侧到限位后平均腿高继续漂移。 */
+    dy = Limit(dy, FOOT_Y_STEP_MAX_MM);/*腿长步进限幅*/
+    /* 两侧共同限幅，避免单侧到限位后平均腿高继续漂移。*/
     low = fmaxf(FOOT_Y_MIN_MM - current_y[0], current_y[1] - FOOT_Y_MAX_MM);
     high = fminf(FOOT_Y_MAX_MM - current_y[0], current_y[1] - FOOT_Y_MIN_MM);
     dy = ClampRange(dy, low, high);
@@ -105,9 +105,9 @@ int FootPID_Update(FootPID *p, float roll_deg, const float wheel_rpm[2],
         dx = PID_Update(&state.x[i], error);
         if (!isfinite(dx)) return 0;
         dx = Limit(dx, FOOT_X_STEP_MAX_MM);
-        x[i] = ClampRange(current_x[i] + dx, FOOT_X_MIN_MM, FOOT_X_MAX_MM);
+        x[i] = ClampRange(current_x[i] + dx, FOOT_X_MIN_MM, FOOT_X_MAX_MM);/*限制x的幅度*/
     }
-    for (i = 0; i < 2; ++i) { next_x[i] = x[i]; next_y[i] = y[i]; }
+    for (i = 0; i < 2; ++i) { next_x[i] = x[i]; next_y[i] = y[i]; }/*设置输出赋值*/
     *p = state;
     return 1;
 }

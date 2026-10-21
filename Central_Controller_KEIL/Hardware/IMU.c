@@ -169,6 +169,7 @@ void IMU_6Axis_Gyro_Acc(float ax, float ay, float az,
 	*pitch = asinf(2.0f * (q0*q2 - q1*q3)) * RAD_TO_DEG;
     *yaw = atan2f(2.0f*(q1*q2 + q0*q3), 1.0f - 2.0f*(q2*q2 + q3*q3)) * RAD_TO_DEG;
 }
+void Mag_Apply_Calibration(float *mx, float *my, float *mz);
 
 /**
   * 函    数：9轴姿态解算（使用加速度计、陀螺仪和磁力计互补滤波融合）
@@ -199,6 +200,8 @@ void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
 	ax /= norm;
 	ay /= norm;
 	az /= norm;
+	
+	Mag_Apply_Calibration(&mx,&my,&mz);
 	
 	/*磁力计归一化，对应实际磁力方向[mx, my, mz]*/
     norm = sqrtf(mx*mx + my*my + mz*mz);
@@ -242,8 +245,8 @@ void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
 	float ez = (ax * vy - ay * vx) + (mx * wy - my * wx);
 
 	/*误差补偿*/
-	float Kp = 0.2f;		//PI互补滤波器的Kp系数，决定了四元数姿态贴近加速度计姿态和磁力计姿态的快慢
-	float Ki = 0.1f;		//PI互补滤波器的Ki系数，用于消除稳态误差，此值过大可能导致不稳定
+	float Kp = 0.5f;		//PI互补滤波器的Kp系数，决定了四元数姿态贴近加速度计姿态和磁力计姿态的快慢
+	float Ki = 0.01f;		//PI互补滤波器的Ki系数，用于消除稳态误差，此值过大可能导致不稳定
 	static float exInt, eyInt, ezInt;	//积分变量
 	
 	/*误差逐渐累加到积分变量中，进行误差积分*/
@@ -276,3 +279,76 @@ void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     *yaw = atan2f(2.0f*(q1*q2 + q0*q3), 1.0f - 2.0f*(q2*q2 + q3*q3)) * RAD_TO_DEG;
 }
 
+
+typedef struct {
+    float bias[3];      // 硬铁偏置 (offset)
+    float scale[3];     // 各轴缩放系数
+    uint8_t calibrated; // 是否已校准
+} MagCalib_t;
+
+MagCalib_t mag_calib = {
+    .bias  = {0.0f, 0.0f, 0.0f},
+    .scale = {1.0f, 1.0f, 1.0f},
+    .calibrated = 0
+};
+void Mag_Calibrate_Collect(float mx, float my, float mz)
+{
+    static float mag_min[3] = { 9999.0f,  9999.0f,  9999.0f};
+    static float mag_max[3] = {-9999.0f, -9999.0f, -9999.0f};
+    static uint32_t sample_cnt = 0;
+
+    // 更新最大最小值
+    if (mx < mag_min[0]) mag_min[0] = mx;
+    if (mx > mag_max[0]) mag_max[0] = mx;
+    if (my < mag_min[1]) mag_min[1] = my;
+    if (my > mag_max[1]) mag_max[1] = my;
+    if (mz < mag_min[2]) mag_min[2] = mz;
+    if (mz > mag_max[2]) mag_max[2] = mz;
+
+    sample_cnt++;
+
+    // 建议采集至少 800~1500 个点再计算
+    if (sample_cnt >= 1200)
+    {
+        // 计算硬铁偏置（椭圆中心）
+        mag_calib.bias[0] = (mag_max[0] + mag_min[0]) * 0.5f;
+        mag_calib.bias[1] = (mag_max[1] + mag_min[1]) * 0.5f;
+        mag_calib.bias[2] = (mag_max[2] + mag_min[2]) * 0.5f;
+
+        // 计算各轴半径
+        float radius[3];
+        radius[0] = (mag_max[0] - mag_min[0]) * 0.5f;
+        radius[1] = (mag_max[1] - mag_min[1]) * 0.5f;
+        radius[2] = (mag_max[2] - mag_min[2]) * 0.5f;
+
+        // 取平均半径作为参考
+        float avg_radius = (radius[0] + radius[1] + radius[2]) / 3.0f;
+
+        // 计算缩放系数（把各轴拉成接近圆形）
+        mag_calib.scale[0] = avg_radius / radius[0];
+        mag_calib.scale[1] = avg_radius / radius[1];
+        mag_calib.scale[2] = avg_radius / radius[2];
+
+        mag_calib.calibrated = 1;
+        sample_cnt = 0;   // 可选：重置，方便多次校准
+
+        // 这里可以打印或保存校准结果
+        // printf("Mag Calib Done!\n");
+        // printf("Bias: %.2f, %.2f, %.2f\n", mag_calib.bias[0], mag_calib.bias[1], mag_calib.bias[2]);
+        // printf("Scale: %.3f, %.3f, %.3f\n", mag_calib.scale[0], mag_calib.scale[1], mag_calib.scale[2]);
+    }
+}
+void Mag_Apply_Calibration(float *mx, float *my, float *mz)
+{
+    if (!mag_calib.calibrated) return;
+
+    // 先减偏置（硬铁）
+    float x = *mx - mag_calib.bias[0];
+    float y = *my - mag_calib.bias[1];
+    float z = *mz - mag_calib.bias[2];
+
+    // 再乘缩放（简单软铁）
+    *mx = x * mag_calib.scale[0];
+    *my = y * mag_calib.scale[1];
+    *mz = z * mag_calib.scale[2];
+}

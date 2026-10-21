@@ -22,5 +22,6 @@ void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
 							float gx, float gy, float gz, 
 							float mx, float my, float mz, 
 							float *roll, float *pitch, float *yaw, float dt);
+void Mag_Calibrate_Collect(float mx, float my, float mz);
 
 #endif
