@@ -42,16 +42,16 @@ extern volatile uint32_t CAN_Time_Out_Counter;/*CAN超时计数器*/
 #if Central_Driver
 float angle[3];                      /* Pitch、Yaw、Roll，度；仅主循环写 */
 volatile float Speed[2]={0};//双轮转速,单位是：rpm
-static volatile uint32_t control_time_ms;/*跳跃功能专供*/
+/* TIM2累计毫秒，可自然回绕；跳跃按无符号差值计时，不清零这个公共时钟。 */
+static volatile uint32_t control_time_ms;
 volatile uint8_t flag_to_update;/*到时间就发送角度*/
 /* 初始目标采用合法工作区内的宏；首次下发成功后表示最近一次指令位置。 */
- float current_leg_height[2]={FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};
- float current_leg_x[2]={FOOT_INITIAL_X_MM, FOOT_INITIAL_X_MM};
+ float current_leg_height[2]={FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};/*足端Y位置初始化*/
+ float current_leg_x[2]={FOOT_INITIAL_X_MM, FOOT_INITIAL_X_MM};/*足端X位置初始化*/
  float current_target_angle_pitch_yaw[2]={0};/*当前目标角度，第一个是pitch 第二个是yaw*/
 extern LegIK_Geometry My_LegIK_Geometry;
 extern LegIK_Angles Left_LegIK_Angles ;
 extern LegIK_Angles Right_LegIK_Angles;
-/*轮足的当前状态，静止直立？跳跃？运动奔跑？？*/
 PID Speed_PID;/*给电机驱动板的PID，根据目标速度和当前速度求出需要的倾角pitch*/
 FootPID Foot_PID;/*足端位置的PID*/
 volatile float target_Speed=0.0f;/*目标速度，单位是：rpm*/
@@ -102,8 +102,7 @@ void TIM2_IRQHandler(void)
 
 static void Control_Fault(const char *message)
 {
-    Robot_State = Robot_Fault;
-    State_Lock = 1;
+    Robot_State = ROBOT_FAULT;
     /* 停止发送控制数据；驱动板由自己的CAN超时路径停止PWM。 */
     while (1) {
         printf("%s\n", message);
@@ -115,7 +114,7 @@ static void Control_Fault(const char *message)
 int main(void)
 {
     Servo_Init(SERVO_PERIOD_US);
-    Leg_ResetFootPositionHistory();
+    Leg_ResetFootPositionHistory();/*首次设置腿高，不限制范围*/
     Serial_Init();
     if (!CAN_Init_Together()) Control_Fault("CAN init failed");
     while (imu963ra_init()) {}
@@ -134,10 +133,12 @@ int main(void)
             LegIK_Result foot_result;
             flag_to_update = 0;
 
+
+            /*现在开始，更新角度*/
             imu963ra_get_acc();
             imu963ra_get_gyro();
             imu963ra_get_mag();
-            if (imu963ra_spi_error) Control_Fault("IMU SPI error");
+            if (imu963ra_spi_error) Control_Fault("IMU SPI error");/*imu963ra_spi_error只有把SPI初始化后被设置为0*/
             imu963ra_acc_x_transition = imu963ra_acc_transition(imu963ra_acc_x);
             imu963ra_acc_y_transition = imu963ra_acc_transition(imu963ra_acc_y);
             imu963ra_acc_z_transition = imu963ra_acc_transition(imu963ra_acc_z);
@@ -153,10 +154,12 @@ int main(void)
                     imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition,
                     &angle[2], &angle[0], &angle[1], IMU_PERIOD_MS * 0.001f))
                 Control_Fault("IMU attitude invalid");
+            /*角度更新完成*/
 
+            
             if (Jump_Request) {
                 Jump_Request = 0; /* 请求只消费一次，跳跃中不重复启动。 */
-                if (!State_Lock && Jump_Start(now_ms) == JUMP_RUNNING) {
+                if (Robot_State == ROBOT_NORMAL && Jump_Start(now_ms) == JUMP_RUNNING) {
                     target_Speed = 0.0f;
                     PID_Reset(&Speed_PID);
                     PID_Reset(&Foot_PID.roll);
@@ -168,8 +171,8 @@ int main(void)
                     printf("Jump request rejected\n");
                 }
             }
-            if (Robot_State == Robot_Fault) Control_Fault("Jump command failed");
-            if (Robot_State == Jumping) {
+            if (Robot_State == ROBOT_FAULT) Control_Fault("Jump command failed");
+            if (Robot_State == ROBOT_JUMPING) {
                 accel_g = sqrtf(imu963ra_acc_x_transition * imu963ra_acc_x_transition +
                                 imu963ra_acc_y_transition * imu963ra_acc_y_transition +
                                 imu963ra_acc_z_transition * imu963ra_acc_z_transition);
@@ -192,10 +195,7 @@ int main(void)
             if_We_Should_Infrom_Main_Function_to_PID = 0;
             NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
 
-            if (!State_Lock) {
-                Robot_State = (fabsf(target_Speed) > FOOT_SPEED_DEADBAND_RPM ||
-                               fabsf(wheels[0]) > FOOT_SPEED_DEADBAND_RPM ||
-                               fabsf(wheels[1]) > FOOT_SPEED_DEADBAND_RPM) ? Running : Stand_Stop;
+            if (Robot_State == ROBOT_NORMAL) {
                 if (!SpeedPID_Update(&Speed_PID, target_Speed, wheels,
                                      &current_target_angle_pitch_yaw[0]))
                     Control_Fault("Speed PID invalid");
@@ -208,7 +208,7 @@ int main(void)
             }
 
             /* 跳跃独占足端输出；普通模式统一由足端PID生成坐标并下发。 */
-            if (!State_Lock && FootPID_Update(&Foot_PID, angle[2], wheels,
+            if (Robot_State == ROBOT_NORMAL && FootPID_Update(&Foot_PID, angle[2], wheels,
                     current_leg_x, current_leg_height, next_x, next_y)) {
                 foot_result = Leg_SetFootPositions(next_x, next_y);
                 if (foot_result == LEG_IK_OK) {

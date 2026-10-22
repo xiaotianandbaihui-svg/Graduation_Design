@@ -105,13 +105,13 @@ int8_t Jump_Update(uint32_t now_ms, float accel_g)
         }
         return result;
     }
-    if ((uint32_t)(now_ms-started) >= JUMP_TIMEOUT_MS) return Jump_Fault();
+    if ((uint32_t)(now_ms-started) >= JUMP_TIMEOUT_MS) return Jump_Fault();/*跳跃过程超时检测，超时锁死状态*/
 
     /* 第一阶段下蹲等待完成，进入第二阶段蹬伸。 */
     if (phase == 1) {
         if ((uint32_t)(now_ms-phase_time) >= JUMP_SQUAT_MS) {
-            if (!SetHeight(JUMP_HIGH_MM, 1)) return Jump_Fault();
-            phase = 2; count = 0; phase_time = sampled = now_ms;
+            if (!SetHeight(JUMP_HIGH_MM, 1)) return Jump_Fault();/*直接以最快速度释放腿*/
+            phase = 2; count = 0; phase_time = sampled = now_ms;/*进入二阶段*/
         }
         return result;
     }

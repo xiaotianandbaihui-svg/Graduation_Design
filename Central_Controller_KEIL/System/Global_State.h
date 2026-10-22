@@ -1,15 +1,13 @@
-/* 状态仅由主循环修改；跳跃或故障锁定时，普通PID不能控制足端。 */
+/* 状态仅由主循环修改；中断只提交请求，不直接切换控制模式。 */
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 
-#include <stdint.h>
+typedef enum {
+    ROBOT_NORMAL,   /* 普通PID控制，包括静止和运动；允许开始跳跃 */
+    ROBOT_JUMPING,  /* 跳跃独占足端输出，完成恢复后才回到普通状态 */
+    ROBOT_FAULT     /* 故障停机，须检查后重启；跳跃接口不能清除故障 */
+} RobotState;
 
-#define Stand_Stop  0x01u
-#define Jumping     0x02u
-#define Running     0x04u
-#define Robot_Fault 0x08u
-
-extern uint8_t Robot_State;
-extern uint8_t State_Lock;
+extern RobotState Robot_State;
 
 #endif
