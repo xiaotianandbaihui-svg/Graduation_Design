@@ -6,7 +6,7 @@
 /* 主控端：STM32F103C8T6，PA11=RX、PA12=TX，500 kbit/s。 */
 #define CAN_ANGLE_LEGHEIGHT_ID 0x101u  /* 发送当前的角度和当前腿高 */
 #define CAN_TARGET_ANGLE_ID    0x100u	 /*发送目标角度*/
-#define CAN_SPEED_ID    0x103u
+#define CAN_SPEED_ID    0x200u
 
 /* 在系统时钟初始化之后调用；1成功，0时钟不支持或CAN初始化失败。
  * 独占CAN1和滤波器0，不配置系统时钟、不使用定时器。 */

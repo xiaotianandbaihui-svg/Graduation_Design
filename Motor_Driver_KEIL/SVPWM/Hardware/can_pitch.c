@@ -17,7 +17,8 @@ extern float the_angles[2]; /* [0]=Pitch, [1]=Yaw */
 extern float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
 extern float target_angle[2];
 #endif
-extern uint8_t Its_Time_to_PID;
+volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
+volatile uint32_t CAN_Time_Out_Counter=0;/*CAN超时计数器*/
 
 int CAN_Init_Together(void)
 {
@@ -64,7 +65,7 @@ int CAN_Init_Together(void)
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
     filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_ID << 5);
     filter.CAN_FilterIdLow = 0;
-    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配11位标准ID */
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配10位标准ID,最低位忽略掉 */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
     filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
     filter.CAN_FilterActivation = ENABLE;
@@ -75,13 +76,14 @@ int CAN_Init_Together(void)
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
     filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_ID << 5);
     filter.CAN_FilterIdLow = 0;
-    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配11位标准ID */
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配10位标准ID,最低位忽略掉 */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
     filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
     filter.CAN_FilterActivation = ENABLE;
     CAN_FilterInit(&filter);
-
-    Its_Time_to_PID = 0;
+    
+    if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
+    CAN_Time_Out_Counter=0;/*CAN超时计数器*/
     NVIC_ClearPendingIRQ(USB_LP_CAN1_RX0_IRQn);
     irq.NVIC_IRQChannel = USB_LP_CAN1_RX0_IRQn;
     irq.NVIC_IRQChannelPreemptionPriority = 1;
@@ -151,8 +153,7 @@ int CAN_Send_The_Wheels_Speed(float* left_rpm ,float* right_rpm)
     msg.Data[7] = (uint8_t)(raw >> 24);
     return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
 }
-static uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
-volatile uint32_t CAN_Time_Out_Counter=0;/*CAN超时计数器*/
+
 /*接收数据中断，*/
 void USB_LP_CAN1_RX0_IRQHandler(void)
 {
@@ -178,8 +179,6 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
         if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
 		    {
         CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
-				Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
-				if_We_Should_Infrom_Main_Function_to_PID=0;
 		    }
 				#else 
         if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
@@ -225,7 +224,5 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 		if(if_We_Should_Infrom_Main_Function_to_PID==0x03)
 		{
         CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
-				Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
-				if_We_Should_Infrom_Main_Function_to_PID=0;
 		}
 }

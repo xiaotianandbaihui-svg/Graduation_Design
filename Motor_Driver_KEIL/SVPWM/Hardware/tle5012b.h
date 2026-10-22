@@ -36,13 +36,14 @@ typedef enum {
     TLE_CONFIG_ERROR = -6
 } TLE_Result;
 
-/* 前提：你已经配置好SPI1和CS GPIO，且编码器上电稳定至少10ms。
+/* 上电先调用一次BusInit，配置两颗编码器共用的SPI1及片选并等待10ms。
  * SPI1：主机、16位、MSB先、CPOL=Low、CPHA=2Edge、双线全双工、软件NSS。
  * PA5=SCK，PA6=MISO，PA7=MOSI；默认推挽SSC时SCK不超过8MHz。
  * id=0：CS为PA4；id=1：CS为PB1。未选中的CS保持高。
- * 这些函数不配置SPI1、不占用定时器，也不执行任何电机控制。
+ * Init/Read/Write只访问编码器，不重新配置SPI1，也不执行电机控制。
  * 同一SPI总线不可被其他中断/任务同时使用。 */
 
+void TLE5012B_BusInit(void);
 TLE_Result TLE5012B_Init(uint8_t id); /* 清上电状态，检查360度量程/DSPU并读角度 */
 TLE_Result TLE5012B_ReadReg(uint8_t id, uint8_t reg, uint16_t *value);
 TLE_Result TLE5012B_WriteReg(uint8_t id, uint8_t reg, uint16_t value);

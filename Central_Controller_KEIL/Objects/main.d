@@ -37,3 +37,4 @@
 .\objects\main.o: .\Hardware\leg_ik.h
 .\objects\main.o: .\Hardware\servo.h
 .\objects\main.o: .\System\Delay.h
+.\objects\main.o: .\Hardware\balance_pid.h

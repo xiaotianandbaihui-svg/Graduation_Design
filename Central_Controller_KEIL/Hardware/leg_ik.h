@@ -15,7 +15,7 @@
 #endif
 
 #ifndef FOOT_SERVO_STEP_MAX_DEG
-#define FOOT_SERVO_STEP_MAX_DEG 3.0f /* 每次四路各自的最大指令角变化；20ms带载实测后修改 */
+#define FOOT_SERVO_STEP_MAX_DEG 20.0f /* 每次四路各自的最大指令角变化；20ms带载实测后修改,单位是：° */
 #endif
 
 /* 同一条腿的机构：A--B--P--D--E--A。
@@ -67,9 +67,10 @@ LegIK_Result LegIK_Solve(const LegIK_Geometry *geometry,
                          float x_mm, float y_mm, LegIK_Angles *out);
 
 /* 统一设置左右足端：两腿分别逆解，沿用 servo=Servo_Bias-q 的安装映射。
- * 先验证全部四路再统一下发；右腿使用右腿逆解结果。
- * 超过单次舵机角变化限值时，缩小整组x/y增量并重新逆解，最多10次。
- * 成功返回LEG_IK_OK，x/y回写实际下发的指令坐标；失败不修改数组或历史。
+ * 左右各逆解一次；舵机驱动检查四路角度并统一下发。
+ * 超过单次角度步长返回LEG_IK_STEP_ERROR，上层应减小坐标步长后再调用。
+ * x/y须为有效的两元素数组，本函数不修改它们；成功返回LEG_IK_OK。
+ * 失败不修改舵机输出、逆解结果或指令历史。
  * 首次调用没有实际角度反馈，直接设置合法初始点，不保证20ms到位。
  * 必须先Servo_Init，仅主循环调用；不要与Jump等其他舵机控制器同时运行。
  * 这些坐标是指令位置，不能当作已经到位的实测位置。 */

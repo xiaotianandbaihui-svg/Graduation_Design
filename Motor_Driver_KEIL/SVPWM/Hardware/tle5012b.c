@@ -2,9 +2,53 @@
 #include "stm32f10x.h"
 #include "stm32f10x_gpio.h"
 #include "stm32f10x_spi.h"
+#include "stm32f10x_rcc.h"
 #include "Delay.h"
 /* 仅限制等待次数，防止SPI异常时永久卡住，不是精确的微秒超时。 */
 #define SPI_WAIT_LIMIT 10000u
+
+/* 两颗编码器共用SPI1；PA4/PB1分别片选，未选中时保持高。 */
+void TLE5012B_BusInit(void)
+{
+    GPIO_InitTypeDef gpio;
+    SPI_InitTypeDef spi;
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB |
+                          RCC_APB2Periph_AFIO | RCC_APB2Periph_SPI1, ENABLE);
+    GPIO_PinRemapConfig(GPIO_Remap_SPI1, DISABLE);
+    GPIO_SetBits(GPIOA, GPIO_Pin_4);
+    GPIO_SetBits(GPIOB, GPIO_Pin_1);
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    gpio.GPIO_Mode = GPIO_Mode_Out_PP;
+    gpio.GPIO_Pin = GPIO_Pin_4;
+    GPIO_Init(GPIOA, &gpio);
+    gpio.GPIO_Pin = GPIO_Pin_1;
+    GPIO_Init(GPIOB, &gpio);
+
+    gpio.GPIO_Pin = GPIO_Pin_5;
+    gpio.GPIO_Mode = GPIO_Mode_AF_PP;
+    GPIO_Init(GPIOA, &gpio);
+    gpio.GPIO_Pin = GPIO_Pin_6;
+    gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;
+    GPIO_Init(GPIOA, &gpio);
+    gpio.GPIO_Pin = GPIO_Pin_7;
+    gpio.GPIO_Mode = TLE5012B_RELEASE_MOSI ? GPIO_Mode_IN_FLOATING : GPIO_Mode_AF_PP;
+    GPIO_Init(GPIOA, &gpio);
+
+    SPI_I2S_DeInit(SPI1);
+    SPI_StructInit(&spi);
+    spi.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
+    spi.SPI_Mode = SPI_Mode_Master;
+    spi.SPI_DataSize = SPI_DataSize_16b;
+    spi.SPI_CPOL = SPI_CPOL_Low;
+    spi.SPI_CPHA = SPI_CPHA_2Edge;
+    spi.SPI_NSS = SPI_NSS_Soft;
+    spi.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; /* PCLK2=72MHz时为4.5MHz */
+    spi.SPI_FirstBit = SPI_FirstBit_MSB;
+    SPI_Init(SPI1, &spi);
+    SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSSInternalSoft_Set);
+    SPI_Cmd(SPI1, ENABLE);
+    Delay_ms(10u);
+}
 
 /* 使用已有微秒延时，满足SSC片选及DATA换向间隔。 */
 static void SSC_Gap(void)

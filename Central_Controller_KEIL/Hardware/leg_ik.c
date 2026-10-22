@@ -1,6 +1,6 @@
 #include "leg_ik.h"
 #include <math.h>
-#include "stm32f10x.h"
+#include "servo.h"
 
 #define RAD_TO_DEG 57.29577951308232f
 #define LENGTH_EPS 0.00001f
@@ -114,6 +114,45 @@ LegIK_Result LegIK_Solve(const LegIK_Geometry *g,
     angles.q1_deg = Wrap360(q1 * RAD_TO_DEG);
     angles.q4_deg = Wrap360(q4 * RAD_TO_DEG);
     *out = angles;
+    return LEG_IK_OK;
+}
+
+static uint8_t have_foot_command;
+static float last_servo[4];
+
+void Leg_ResetFootPositionHistory(void)
+{
+    have_foot_command = 0u;
+}
+LegIK_Result Leg_SetFootPositions(float x_mm[2], float y_mm[2])
+{
+    LegIK_Angles q[2];
+    float command[4];
+    LegIK_Result result;
+    unsigned i;
+
+    /* 左右各逆解一次；任意一侧失败都不更新舵机。 */
+    for (i = 0; i < 2; ++i) {
+        result = LegIK_Solve(&My_LegIK_Geometry, x_mm[i], y_mm[i], &q[i]);
+        if (result != LEG_IK_OK) return result;
+    }
+    command[0] = Servo_Bias_1 - q[0].q1_deg;
+    command[1] = Servo_Bias_2 - q[0].q4_deg;
+    command[2] = Servo_Bias_3 - q[1].q1_deg;
+    command[3] = Servo_Bias_4 - q[1].q4_deg;
+
+    /* 超过步长直接拒绝，由上层减小目标步长，不在这里重复逆解。 */
+    if (have_foot_command) {
+        for (i = 0; i < 4; ++i)
+            if (fabsf(command[i] - last_servo[i]) > FOOT_SERVO_STEP_MAX_DEG)
+                return LEG_IK_STEP_ERROR;
+    }
+    /* 舵机驱动负责角度范围检查和四路统一提交，上层不重复检查。 */
+    if (Servo_SetAngles(command) != SERVO_OK) return LEG_IK_SERVO_ERROR;
+    for (i = 0; i < 4; ++i) last_servo[i] = command[i];
+    Left_LegIK_Angles = q[0];
+    Right_LegIK_Angles = q[1];
+    have_foot_command = 1u;
     return LEG_IK_OK;
 }
 

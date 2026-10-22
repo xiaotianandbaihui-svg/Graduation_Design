@@ -9,13 +9,15 @@
 #include "can_pitch.h"
 
 //uint8_t RxData;			//定义用于接收串口数据的变量
-volatile uint8_t Its_Time_to_PID=0;//PID刷新标志
+
 
 volatile int8_t dir1=0,dir2=0;//标记运动方向 1：小车向前运动  0：小车向后运动
 volatile int8_t car_forward_electircal_forward_1=1,car_forward_electircal_forward_2=1;//记录车运行的方向和轮子转动的机械方向是否匹配，如果电角度增长方向对应轮子使得车前进的方向一致，那么就为1，反之为-1
 uint8_t go=0;//轮足开始运行的总开关，初始的时候为0
 
-#define CAN_Time_Out_Threshold 2880000//CAN超时阈值
+
+#define IMU_PERIOD_MS 10//陀螺仪刷新周期，单位ms
+#define CAN_Time_Out_Threshold 6//CAN超时阈值
 #define USE_DIFFERENT_PID_ARGUMENTS 0//是否使用不同的PID参数，1为使用，0为不使用
 #define Central_Driver 0
 #define Formal 1 //用来控制代码调试模式和正式模式，我比较蠢咯，这种方法也不错QWQ，主要是硬件没到，现在的工作都是“预制软件”
@@ -41,6 +43,43 @@ BalancePID for_balance_yaw;/*用于控制车偏航角平衡的PID对象,里面�
 #endif
 
 extern volatile uint32_t CAN_Time_Out_Counter;
+extern volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID;
+
+
+
+static void IMU_TimerInit(void)
+{
+    RCC_ClocksTypeDef clocks;
+    TIM_TimeBaseInitTypeDef timer;
+    NVIC_InitTypeDef nvic;
+    uint32_t tim_hz;
+    RCC_GetClocksFreq(&clocks);
+    tim_hz = clocks.PCLK1_Frequency;
+    if (clocks.PCLK1_Frequency != clocks.HCLK_Frequency) tim_hz *= 2u;
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
+    TIM_DeInit(TIM3);
+    TIM_TimeBaseStructInit(&timer);
+    timer.TIM_Prescaler = (uint16_t)(tim_hz/1000000u-1u); /* 1us/计数 */
+    timer.TIM_Period = IMU_PERIOD_MS*1000u-1u;
+    TIM_TimeBaseInit(TIM3, &timer);
+    TIM_ClearITPendingBit(TIM3, TIM_IT_Update); /* 清除初始化UG产生的UIF */
+    /* Serial_Init已设置分组2，TIM3优先于USART1接收中断。 */
+    nvic.NVIC_IRQChannel = TIM3_IRQn;
+    nvic.NVIC_IRQChannelPreemptionPriority = 0;
+    nvic.NVIC_IRQChannelSubPriority = 0;
+    nvic.NVIC_IRQChannelCmd = ENABLE;
+    NVIC_Init(&nvic);
+    TIM_ITConfig(TIM3, TIM_IT_Update, ENABLE);
+    TIM_Cmd(TIM3, DISABLE);
+}
+
+void TIM3_IRQHandler(void)
+{
+    if (TIM_GetITStatus(TIM3, TIM_IT_Update) == SET) {
+        TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
+		CAN_Time_Out_Counter++;//计数自增
+    }
+}
 
 
 #if (Formal==1)
@@ -48,10 +87,11 @@ int main(void)
 {
 	/*串口初始化*/
 	Serial_Init();		//串口初始化
-	TLE5012B_Init(0);
-	TLE5012B_Init(1);
+	TLE5012B_BusInit(); /* 先配置SPI1和两路片选，Motor_init内再检查编码器。 */
 	/*特别注意，轮子需要校准，所以请先把车子拿起来，不然很可能导致车子直接和你Say Good_Bye，你也不想他变为牢大吧！！！*/
-	Motor_init();     //初始化了SVPWM要用的各个外设，这里更加重要的是，它把轮子的正方向强制转化为了电角度的正方向
+	if (!Motor_init()) {
+		while (1) { printf("Motor init failed\n"); Delay_ms(500); }
+	}
 	CAN_Init_Together();/*初始化CAN总线*/
 	/*初始化pitch的PID控制器*/
 	Balance_Init(0,&for_balance_pitch);
@@ -60,7 +100,7 @@ int main(void)
   /*初始化yaw的PID控制器*/
 	Balance_Init(1,&for_balance_yaw);
 	Balance_Start(&for_balance_yaw);//开启PID，放心，这里只是把积分项啊这些东西全部清零了
-
+	IMU_TimerInit();/*初始化定时器3，用于检测CAN超时*/
 	
 	/*此处进行PID调参*/
 	/*这里特别注意一下调参时候的极性，轮子转动的正方向是电角度正方向！车到时候行驶的正方向是不一定电角度正方向*/
@@ -97,17 +137,16 @@ int main(void)
 	
 	float angle_speed_1=0;
 	float angle_speed_2=0;
-	
+	uint8_t first_PID_update=0;//标记第一次PID更新，用于给dir1和dir2赋值，第一次赋初始值后就自动赋值了
+	uint8_t stage=0;//标记当前收发数据的阶段，0,对应第一包数据，1对应第二包数据
 	while (1)
 	{	
 		if(go==1)
 		{
 			/*这里是主循环，主要是读取角度和轮子速度，然后进行PID计算，最后输出给SVPWM_Update函数*/
-			if(Its_Time_to_PID==1)
+			if(if_We_Should_Infrom_Main_Function_to_PID==0x01&&stage==0)
 			{
-				Its_Time_to_PID=0;//清除标志
-				for_balance_pitch.upright_deg=target_angle[0];/*设置目标角度*/
-				for_balance_yaw.upright_deg=target_angle[1];/*设置目标角度*/
+				stage=1;
 				if(Balance_ReadFeedback(&angle_speed_1,&angle_speed_2)==0)/*读取轮子速度，单位：rpm*/
 				{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
@@ -148,7 +187,13 @@ int main(void)
 				for_balance_yaw.speed[1].kd=0;
 				/*PID参数更新结束*/			
 				#endif
-
+			}
+			else if(if_We_Should_Infrom_Main_Function_to_PID==0x03&&stage==1)
+			{
+				stage=0;//回到读取第一包
+				for_balance_pitch.upright_deg=target_angle[0];/*设置目标角度*/
+				for_balance_yaw.upright_deg=target_angle[1];/*设置目标角度*/
+				if_We_Should_Infrom_Main_Function_to_PID=0;
 				if(Balance_Update(&for_balance_pitch,the_angles[0],angle_speed_1,angle_speed_2,pid_output_for_pitch,0)==0)
 				{
 							/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
@@ -180,17 +225,17 @@ int main(void)
 				
 				pid_output[0]>=0?(dir1=1):(dir1=-1);
 				pid_output[1]>=0?(dir2=1):(dir2=-1);
+				first_PID_update=1;
 			}
 			/*这里不需要加延时，这不是陀螺仪，其实按照编码器的最大速度读就好，这里可能读到旧的，但是无妨*/
 			/*粗心大意得你，别忘了，这里有开关！！*/
-		
+			if(first_PID_update!=0)
 			SVPWM_Update(dir1*car_forward_electircal_forward_1,dir2*car_forward_electircal_forward_2,abs(pid_output[0]),abs(pid_output[1]));/*这里可能因为读取过快读到旧的角度，但是咱们的主频
 			才72Mhz，况且中间还有SPI的读写周期，基本读不了几下旧数据，就算读到了也不过是保持输出磁矢量不变*/
 
 
 
-			CAN_Time_Out_Counter++;//CAN超时计数器自增
-			if(CAN_Time_Out_Counter>CAN_Time_Out_Threshold)
+			if(CAN_Time_Out_Counter>CAN_Time_Out_Threshold)/*目前是3包数据的时间收不到，就认为死机了*/
 			{
 				/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
 				SVPWM_Stop(0);
@@ -211,10 +256,11 @@ int main(void)
 int main(void)
 {
 	Serial_Init();		//串口初始化
-	TLE5012B_Init(0);
-	TLE5012B_Init(1);
+	TLE5012B_BusInit();
 	/*特别注意，轮子需要校准，所以请先把车子拿起来，不然很可能导致车子直接和你Say Good_Bye，你也不想他变为牢大吧！！！*/
-	Motor_init();     //初始化了SVPWM要用的各个外设，这里更加重要的是，它把轮子的正方向强制转化为了电角度的正方向
+	if (!Motor_init()) {
+		while (1) { printf("Motor init failed\n"); Delay_ms(500); }
+	}
 	while(1)
 	{
 		if(go==1)

@@ -18,10 +18,12 @@ void IMU_6Axis_Gyro_Acc_3v(float ax, float ay, float az,
 							 float gx, float gy, float gz, 
 							 float *roll, float *pitch, float *yaw,
 							 float *a_forward, float *a_right, float *a_down, float dt);
-void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az, 
+/* 1=已更新，0=输入/计算异常且保留原姿态；零加速度/磁场时跳过对应校正。 */
+int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az, 
 							float gx, float gy, float gz, 
 							float mx, float my, float mz, 
 							float *roll, float *pitch, float *yaw, float dt);
 void Mag_Calibrate_Collect(float mx, float my, float mz);
+void Mag_Apply_Calibration(float *mx, float *my, float *mz);
 
 #endif

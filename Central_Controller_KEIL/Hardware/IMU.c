@@ -175,108 +175,86 @@ void Mag_Apply_Calibration(float *mx, float *my, float *mz);
   * 函    数：9轴姿态解算（使用加速度计、陀螺仪和磁力计互补滤波融合）
   * 参    数：ax ay az 加速度值，单位：任意
   * 参    数：gx gy gz 陀螺仪角速度值，单位：度每秒
-  * 参    数：mx my mz 校准后的磁力值，单位：任意
+  * 参    数：mx my mz 磁力值，单位与磁校准采样一致；内部应用校准
   * 参    数：roll pitch yaw 解算出来的横滚角、俯仰角和偏航角，输出参数，单位：度
   * 参    数：dt 调用此函数的周期，单位：秒
-  * 返 回 值：无
+  * 返 回 值：1成功，0输入或计算异常
   * 说    明：使用加速度计、陀螺仪和磁力计互补滤波融合，更新全局变量的姿态四元数，输出此四元数对应的欧拉角
-  *           输出的横滚角、俯仰角和偏航角均准确无漂移，但要注意避免磁力计被干扰
+  *           返回1表示更新成功，0表示保留原姿态；精度受传感器标定和磁干扰影响
   */
-void IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az, 
-							float gx, float gy, float gz, 
-							float mx, float my, float mz, 
-							float *roll, float *pitch, float *yaw, float dt)
+int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
+                          float gx, float gy, float gz,
+                          float mx, float my, float mz,
+                          float *roll, float *pitch, float *yaw, float dt)
 {
-	float q0q1, q0q2, q0q3, q1q1, q1q2, q1q3, q2q2, q2q3, q3q3;
-	
-	/*角度制转弧度制*/
-	/*若输入参数已经是弧度制，则不需要此转换*/
-	gx *= DEG_TO_RAD;
-	gy *= DEG_TO_RAD;
-	gz *= DEG_TO_RAD;
-	
-	/*加速度归一化，对应实际重力方向[ax, ay, az]*/
-    float norm = sqrtf(ax*ax + ay*ay + az*az);
-	ax /= norm;
-	ay /= norm;
-	az /= norm;
-	
-	Mag_Apply_Calibration(&mx,&my,&mz);
-	
-	/*磁力计归一化，对应实际磁力方向[mx, my, mz]*/
-    norm = sqrtf(mx*mx + my*my + mz*mz);
-	mx /= norm;
-	my /= norm;
-	mz /= norm;
-	
-	/*重复的计算放在前面统一执行*/
-//	q0q0 = q0 * q0;
-	q0q1 = q0 * q1;
-	q0q2 = q0 * q2;
-	q0q3 = q0 * q3;
-	q1q1 = q1 * q1;
-	q1q2 = q1 * q2;
-	q1q3 = q1 * q3;
-	q2q2 = q2 * q2;
-	q2q3 = q2 * q3;
-	q3q3 = q3 * q3; 
-	
-	/*地球磁场的参考方向*/
-	float hx = 2.0f * (mx * (0.5f - q2q2 - q3q3) + my * (q1q2 - q0q3) + mz * (q1q3 + q0q2));
-	float hy = 2.0f * (mx * (q1q2 + q0q3) + my * (0.5f - q1q1 - q3q3) + mz * (q2q3 - q0q1));
-	float bx = sqrt(hx * hx + hy * hy);
-	float bz = 2.0f * (mx * (q1q3 - q0q2) + my * (q2q3 + q0q1) + mz * (0.5f - q1q1 - q2q2));
-		
-	/*提取重力分量*/
-	/*四元数提取的重力分量，对应理论重力方向[vx, vy, vz]*/
-	float vx = 2.0f*(q1q3 - q0q2);
-	float vy = 2.0f*(q0q1 + q2q3);
-	float vz = 1.0f - 2.0f*(q1q1 + q2q2);
-	
-	/*提取磁力分量*/
-	/*四元数提取的磁力分量，对应理论磁力方向[wx, wy, wz]*/
-    float wx = 2.0f * bx * (0.5f - q2q2 - q3q3) + 2.0f * bz * (q1q3 - q0q2);
-    float wy = 2.0f * bx * (q1q2 - q0q3) + 2.0f * bz * (q0q1 + q2q3);
-    float wz = 2.0f * bx * (q0q2 + q1q3) + 2.0f * bz * (0.5f - q1q1 - q2q2);  
-	
-	/*叉乘得到误差*/
-	float ex = (ay * vz - az * vy) + (my * wz - mz * wy);
-	float ey = (az * vx - ax * vz) + (mz * wx - mx * wz);
-	float ez = (ax * vy - ay * vx) + (mx * wy - my * wx);
+    const float Kp = 0.5f, Ki = 0.01f;
+    static float exInt, eyInt, ezInt;
+    float norm, ex = 0.0f, ey = 0.0f, ez = 0.0f;
+    float ix, iy, iz, n0, n1, n2, n3, sin_pitch;
+    float q0q1 = q0*q1, q0q2 = q0*q2, q0q3 = q0*q3;
+    float q1q1 = q1*q1, q1q2 = q1*q2, q1q3 = q1*q3;
+    float q2q2 = q2*q2, q2q3 = q2*q3, q3q3 = q3*q3;
 
-	/*误差补偿*/
-	float Kp = 0.5f;		//PI互补滤波器的Kp系数，决定了四元数姿态贴近加速度计姿态和磁力计姿态的快慢
-	float Ki = 0.01f;		//PI互补滤波器的Ki系数，用于消除稳态误差，此值过大可能导致不稳定
-	static float exInt, eyInt, ezInt;	//积分变量
-	
-	/*误差逐渐累加到积分变量中，进行误差积分*/
-	exInt += ex * dt;
-	eyInt += ey * dt;
-	ezInt += ez * dt;
-	
-	/*误差[ex, ey, ez]经过PI互补滤波器，补偿给陀螺仪角速度，进而使四元数姿态逐渐贴近加速度计姿态和磁力计姿态*/
-	gx += Kp * ex + Ki * exInt;
-	gy += Kp * ey + Ki * eyInt;
-	gz += Kp * ez + Ki * ezInt;
-	
-	/*四元数更新*/
-	/*此时的[gx, gy, gz]，包含了真实转动和补偿转动，一起用于姿态更新*/
-    q0 += 0.5f * (-q1*gx - q2*gy - q3*gz) * dt;
-    q1 += 0.5f * ( q0*gx - q3*gy + q2*gz) * dt;
-    q2 += 0.5f * ( q3*gx + q0*gy - q1*gz) * dt;
-    q3 += 0.5f * (-q2*gx + q1*gy + q0*gz) * dt;
-    
-	/*四元数归一化*/
-    norm = sqrtf(q0*q0 + q1*q1 + q2*q2 + q3*q3);
-    q0 /= norm;
-    q1 /= norm;
-    q2 /= norm;
-    q3 /= norm;
-	
-	/*四元数转欧拉角*/
-    *roll = atan2f(2.0f*(q2*q3 + q0*q1), 1.0f - 2.0f*(q1*q1 + q2*q2)) * RAD_TO_DEG;
-	*pitch = asinf(2.0f * (q0*q2 - q1*q3)) * RAD_TO_DEG;
-    *yaw = atan2f(2.0f*(q1*q2 + q0*q3), 1.0f - 2.0f*(q2*q2 + q3*q3)) * RAD_TO_DEG;
+    if (!isfinite(gx) || !isfinite(gy) || !isfinite(gz) ||
+        !isfinite(dt) || dt <= 0.0f) return 0;
+
+    norm = sqrtf(ax*ax + ay*ay + az*az);
+    if (!isfinite(norm)) return 0;
+    /* 自由落体可能接近0g：不除以零，暂时只用陀螺仪/有效磁场。 */
+    if (norm > 0.000001f) {
+        float vx = 2.0f*(q1q3 - q0q2);
+        float vy = 2.0f*(q0q1 + q2q3);
+        float vz = 1.0f - 2.0f*(q1q1 + q2q2);
+        ax /= norm; ay /= norm; az /= norm;
+        ex = ay*vz - az*vy;
+        ey = az*vx - ax*vz;
+        ez = ax*vy - ay*vx;
+    }
+
+    norm = sqrtf(mx*mx + my*my + mz*mz);
+    if (!isfinite(norm)) return 0;
+    /* 磁力计首帧未就绪时可以为零，跳过本次磁场校正。 */
+    if (norm > 0.000001f) {
+        Mag_Apply_Calibration(&mx, &my, &mz);
+        norm = sqrtf(mx*mx + my*my + mz*mz);
+        if (!isfinite(norm)) return 0;
+    }
+    if (norm > 0.000001f) {
+        float hx, hy, bx, bz, wx, wy, wz;
+        mx /= norm; my /= norm; mz /= norm;
+        hx = 2.0f*(mx*(0.5f-q2q2-q3q3) + my*(q1q2-q0q3) + mz*(q1q3+q0q2));
+        hy = 2.0f*(mx*(q1q2+q0q3) + my*(0.5f-q1q1-q3q3) + mz*(q2q3-q0q1));
+        bx = sqrtf(hx*hx + hy*hy);
+        bz = 2.0f*(mx*(q1q3-q0q2) + my*(q2q3+q0q1) + mz*(0.5f-q1q1-q2q2));
+        wx = 2.0f*bx*(0.5f-q2q2-q3q3) + 2.0f*bz*(q1q3-q0q2);
+        wy = 2.0f*bx*(q1q2-q0q3) + 2.0f*bz*(q0q1+q2q3);
+        wz = 2.0f*bx*(q0q2+q1q3) + 2.0f*bz*(0.5f-q1q1-q2q2);
+        ex += my*wz - mz*wy;
+        ey += mz*wx - mx*wz;
+        ez += mx*wy - my*wx;
+    }
+
+    ix = exInt + ex*dt; iy = eyInt + ey*dt; iz = ezInt + ez*dt;
+    gx = gx*DEG_TO_RAD + Kp*ex + Ki*ix;
+    gy = gy*DEG_TO_RAD + Kp*ey + Ki*iy;
+    gz = gz*DEG_TO_RAD + Kp*ez + Ki*iz;
+
+    /* 四个分量均使用更新前的四元数，计算成功后才一起提交。 */
+    n0 = q0 + 0.5f*(-q1*gx - q2*gy - q3*gz)*dt;
+    n1 = q1 + 0.5f*( q0*gx - q3*gy + q2*gz)*dt;
+    n2 = q2 + 0.5f*( q3*gx + q0*gy - q1*gz)*dt;
+    n3 = q3 + 0.5f*(-q2*gx + q1*gy + q0*gz)*dt;
+    norm = sqrtf(n0*n0 + n1*n1 + n2*n2 + n3*n3);
+    if (!isfinite(norm) || norm <= 0.000001f) return 0;
+    q0 = n0/norm; q1 = n1/norm; q2 = n2/norm; q3 = n3/norm;
+    exInt = ix; eyInt = iy; ezInt = iz;
+
+    sin_pitch = 2.0f*(q0*q2 - q1*q3);
+    sin_pitch = fmaxf(-1.0f, fminf(1.0f, sin_pitch));
+    *roll = atan2f(2.0f*(q2*q3 + q0*q1), 1.0f-2.0f*(q1*q1 + q2*q2))*RAD_TO_DEG;
+    *pitch = asinf(sin_pitch)*RAD_TO_DEG;
+    *yaw = atan2f(2.0f*(q1*q2 + q0*q3), 1.0f-2.0f*(q2*q2 + q3*q3))*RAD_TO_DEG;
+    return 1;
 }
 
 
