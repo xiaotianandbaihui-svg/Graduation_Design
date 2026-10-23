@@ -3,6 +3,16 @@
 
 #include <stdint.h>
 
+/* 模式切换单独握手；暂停确认之后，跳跃期间不再发送周期控制帧。 */
+#define CAN_DRIVE_MODE_ID      0x102u
+#define CAN_DRIVE_MODE_ACK_ID  0x201u
+#define CAN_DRIVE_NONE        0u
+#define CAN_DRIVE_PAUSE       1u
+#define CAN_DRIVE_RESUME      2u
+extern volatile uint8_t CAN_DriveCommand;
+int CAN_SendDriveModeAck(uint8_t mode);
+
+
 /* 电驱端：STM32F103C8T6，PA11=RX、PA12=TX，500 kbit/s。 */
 #define CAN_ANGLE_LEGHEIGHT_ID 0x101u  /* 主控 -> 电驱 */
 #define CAN_TARGET_ANGLE_ID 0x100u

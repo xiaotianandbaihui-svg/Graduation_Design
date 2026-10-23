@@ -6,6 +6,7 @@
 #include "tle5012b.h"
 #include <math.h>
 #include "Delay.h"
+#include "current_sense.h"
 
 float zero_point_1=0,zero_point_2=0;//记录两个电机在磁编码器特定安装下的A相角度
 float first_mechanical_angle=0,second_mechanical_angle=0;//记录电机当前机械角度
@@ -39,9 +40,9 @@ static float Wrap360(float angle)
 static void PhaseEnable(uint8_t id, BitAction state)
 {
     if (id == 0u) {
-        GPIO_WriteBit(GPIOB, GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14, state);
+        GPIO_WriteBit(GPIOB, GPIO_Pin_12 | GPIO_Pin_11 | GPIO_Pin_10, state);
     } else {
-        GPIO_WriteBit(GPIOB, GPIO_Pin_15 | GPIO_Pin_3, state);
+        GPIO_WriteBit(GPIOB, GPIO_Pin_6 | GPIO_Pin_3, state);
         GPIO_WriteBit(GPIOA, GPIO_Pin_15, state);
     }
 }
@@ -58,7 +59,7 @@ static int Fail(void)
 {
     SVPWM_Stop(0u);
     SVPWM_Stop(1u);
-    GPIO_ResetBits(GPIOB, GPIO_Pin_0);
+    GPIO_ResetBits(GPIOA, GPIO_Pin_0);
     ready = 0u;
     ClearCalibration();
     return 0;
@@ -116,17 +117,19 @@ int SVPWM_Init(void)
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB |
                           RCC_APB2Periph_AFIO, ENABLE);
     /* 先预置ODR低，再切输出模式，避免切换时出现高电平。 */
-    GPIO_ResetBits(GPIOB, GPIO_Pin_0);
-    PinMode(GPIOB, GPIO_Pin_0, GPIO_Mode_Out_PP);
+    GPIO_ResetBits(GPIOA, GPIO_Pin_0);
+    PinMode(GPIOA, GPIO_Pin_0, GPIO_Mode_Out_PP);
     ready = running[0] = running[1] = 0u;
     ClearCalibration();
     GPIO_PinRemapConfig(GPIO_FullRemap_TIM2, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_TIM4, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+    GPIO_ResetBits(GPIOB, GPIO_Pin_4); /* CAL：释放JTAG后拉低，先于EN使能。 */
+    PinMode(GPIOB, GPIO_Pin_4, GPIO_Mode_Out_PP);
     PhaseEnable(0u, Bit_RESET);
     PhaseEnable(1u, Bit_RESET);
-    PinMode(GPIOB, GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14 |
-                   GPIO_Pin_15 | GPIO_Pin_3, GPIO_Mode_Out_PP);
+    PinMode(GPIOB, GPIO_Pin_12 | GPIO_Pin_11 | GPIO_Pin_10 |
+                   GPIO_Pin_6 | GPIO_Pin_3, GPIO_Mode_Out_PP);
     PinMode(GPIOA, GPIO_Pin_15, GPIO_Mode_Out_PP);
     PinMode(GPIOA, GPIO_Pin_8, GPIO_Mode_IPU);
     PinMode(GPIOB, GPIO_Pin_5, GPIO_Mode_IPU);
@@ -145,10 +148,11 @@ int SVPWM_Init(void)
     PinMode(GPIOA, GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3, GPIO_Mode_AF_PP);
     PinMode(GPIOB, GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9, GPIO_Mode_AF_PP);
     Delay_us(2000u);
-    GPIO_SetBits(GPIOB, GPIO_Pin_0);
+    GPIO_SetBits(GPIOA, GPIO_Pin_0);
     Delay_us(2000u); /* 等待DRV唤醒，INL仍全为低。 */
     ready = 1u;
-    return DriverOK() ? 1 : Fail();
+    /* INL仍全低、MOS不切换时完成CSA校准及四路ADC零偏采集。 */
+    return DriverOK() && CurrentSense_Init() ? 1 : Fail();
 }
 
 static uint16_t Compare(float duty)
@@ -241,7 +245,7 @@ int Motor_init(void)
     if (!SVPWM_Init()) return 0;
     if (SVPWM_POLE_PAIRS == 0u || SVPWM_ALIGN_MOD == 0u ||
         SVPWM_ALIGN_MOD > 100u) return Fail();
-    Delay_ms(10u); /* SPI1/CS沿用已有配置，补足编码器上电等待。 */
+    Delay_ms(10u); /* SPI2/CS沿用已有配置，补足编码器上电等待。 */
     if (TLE5012B_Init(0u) != TLE_OK || TLE5012B_Init(1u) != TLE_OK) //这里就初始化了磁编码器
         return Fail();
 

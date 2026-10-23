@@ -1,4 +1,5 @@
 #include "six_step.h"
+#include "current_sense.h"
 #include "tle5012b.h"
 #include "stm32f10x.h"
 #include "stm32f10x_rcc.h"
@@ -18,8 +19,8 @@ static GPIO_TypeDef * const low_port[2][3] = {
     {GPIOB, GPIOB, GPIOB}, {GPIOB, GPIOB, GPIOA}
 };
 static const uint16_t low_pin[2][3] = {
-    {GPIO_Pin_12, GPIO_Pin_13, GPIO_Pin_14},
-    {GPIO_Pin_15, GPIO_Pin_3, GPIO_Pin_15}
+    {GPIO_Pin_12, GPIO_Pin_11, GPIO_Pin_10},
+    {GPIO_Pin_6, GPIO_Pin_3, GPIO_Pin_15}
 };
 static const uint16_t pwm_channel[3] = {
     TIM_Channel_2, TIM_Channel_3, TIM_Channel_4
@@ -94,7 +95,7 @@ void SixStep_StopAll(void)
         /* 先把所有输入拉低，再让DRV8323H进入睡眠。 */
         AllOff(0u);
         AllOff(1u);
-        GPIO_ResetBits(GPIOB, GPIO_Pin_0);
+        GPIO_ResetBits(GPIOA, GPIO_Pin_0);
     }
     faulted = 1u;
 }
@@ -173,8 +174,8 @@ SixStep_Result SixStep_Init(void)
     faulted = 1u;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB |
                           RCC_APB2Periph_AFIO, ENABLE);
-    GPIO_ResetBits(GPIOB, GPIO_Pin_0);
-    GPIO_Mode(GPIOB, GPIO_Pin_0, GPIO_Mode_Out_PP);
+    GPIO_ResetBits(GPIOA, GPIO_Pin_0);
+    GPIO_Mode(GPIOA, GPIO_Pin_0, GPIO_Mode_Out_PP);
     RCC_GetClocksFreq(&clocks);
     if (clocks.HCLK_Frequency != 72000000u || clocks.PCLK1_Frequency != 36000000u)
         return SIX_STEP_CLOCK_ERROR;
@@ -183,14 +184,16 @@ SixStep_Result SixStep_Init(void)
     GPIO_PinRemapConfig(GPIO_FullRemap_TIM2, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_TIM4, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+    GPIO_ResetBits(GPIOB, GPIO_Pin_4);
+    GPIO_Mode(GPIOB, GPIO_Pin_4, GPIO_Mode_Out_PP);
 
     GPIO_ResetBits(GPIOA, GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_15);
     GPIO_ResetBits(GPIOB, GPIO_Pin_3 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9 |
-                         GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15);
+                         GPIO_Pin_12 | GPIO_Pin_11 | GPIO_Pin_10 | GPIO_Pin_6);
     GPIO_Mode(GPIOA, GPIO_Pin_1 | GPIO_Pin_2 | GPIO_Pin_3 | GPIO_Pin_15,
               GPIO_Mode_Out_PP);
     GPIO_Mode(GPIOB, GPIO_Pin_3 | GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9 |
-                    GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15,
+                    GPIO_Pin_12 | GPIO_Pin_11 | GPIO_Pin_10 | GPIO_Pin_6,
               GPIO_Mode_Out_PP);
     GPIO_Mode(GPIOA, GPIO_Pin_8, GPIO_Mode_IPU);
     GPIO_Mode(GPIOB, GPIO_Pin_5, GPIO_Mode_IPU);
@@ -204,10 +207,12 @@ SixStep_Result SixStep_Init(void)
     GPIO_Mode(GPIOB, GPIO_Pin_7 | GPIO_Pin_8 | GPIO_Pin_9, GPIO_Mode_AF_PP);
     ready = 1u;
     Delay_us(2000u);                  /* 确保此前ENABLE低已进入睡眠 */
-    GPIO_SetBits(GPIOB, GPIO_Pin_0);  /*使能驱动芯片*/
+    GPIO_SetBits(GPIOA, GPIO_Pin_0);  /*使能驱动芯片*/
     Delay_us(2000u);                  /* DRV832x的tWAKE最大1ms，留到2ms */
     faulted = 0u;
-    return CheckDriver();
+    if (CheckDriver() != SIX_STEP_OK) return SIX_STEP_DRIVER_FAULT;
+    if (!CurrentSense_Init()) return Fail(SIX_STEP_CURRENT_SENSE_ERROR);
+    return SIX_STEP_OK;
 }
 
 static SixStep_Result ApplyVector(uint8_t id, uint8_t vector, uint16_t duty)

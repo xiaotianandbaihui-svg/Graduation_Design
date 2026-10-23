@@ -13,12 +13,26 @@
 #if Central_Driver
 extern float Speed[2];
 #else
-extern float the_angles[2]; /* [0]=Pitch, [1]=Yaw */
-extern float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
-extern float target_angle[2];
+extern volatile float the_angles[2]; /* [0]=Pitch, [1]=Yaw */
+extern volatile float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
+extern volatile float target_angle[2];
 #endif
 volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
 volatile uint32_t CAN_Time_Out_Counter=0;/*CAN超时计数器*/
+
+volatile uint8_t CAN_DriveCommand = CAN_DRIVE_NONE;
+
+int CAN_SendDriveModeAck(uint8_t mode)
+{
+    CanTxMsg msg = {0};
+    if (mode != CAN_DRIVE_PAUSE && mode != CAN_DRIVE_RESUME) return 0;
+    msg.StdId = CAN_DRIVE_MODE_ACK_ID;
+    msg.IDE = CAN_Id_Standard;
+    msg.RTR = CAN_RTR_Data;
+    msg.DLC = 1;
+    msg.Data[0] = mode;
+    return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
+}
 
 int CAN_Init_Together(void)
 {
@@ -74,9 +88,9 @@ int CAN_Init_Together(void)
 		filter.CAN_FilterNumber = 1;
     filter.CAN_FilterMode = CAN_FilterMode_IdMask;
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
-    filter.CAN_FilterIdHigh = (uint16_t)(CAN_ANGLE_LEGHEIGHT_ID << 5);
+    filter.CAN_FilterIdHigh = (uint16_t)(CAN_DRIVE_MODE_ID << 5);
     filter.CAN_FilterIdLow = 0;
-    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配10位标准ID,最低位忽略掉 */
+    filter.CAN_FilterMaskIdHigh = 0xFFE0u; /* 精确匹配模式指令 */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
     filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
     filter.CAN_FilterActivation = ENABLE;
@@ -164,6 +178,12 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
     /* FIFO最多3帧：本次处理入口时已有的帧，新到的留给下一次中断。 */
     while (count--) {
         CAN_Receive(CAN1, CAN_FIFO0, &msg); /* 读取并释放FIFO项 */
+        if (msg.StdId == CAN_DRIVE_MODE_ID && msg.IDE == CAN_Id_Standard &&
+            msg.RTR == CAN_RTR_Data && msg.DLC == 1 &&
+            (msg.Data[0] == CAN_DRIVE_PAUSE || msg.Data[0] == CAN_DRIVE_RESUME)) {
+            CAN_DriveCommand = msg.Data[0];
+            continue;
+        }
 			#if Central_Driver
 				if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 8)

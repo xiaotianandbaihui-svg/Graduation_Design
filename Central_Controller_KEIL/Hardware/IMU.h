@@ -5,6 +5,9 @@
 #define DEG_TO_RAD (3.1415926535f/180.0f)
 
 void IMU_InitQuaternion(float ax, float ay, float az);
+/* 落地稳定后重建姿态并清9轴积分；失败保留原姿态。需要有效重力和磁场。 */
+int IMU_ResetAttitude(float ax, float ay, float az, float mx, float my, float mz,
+                      float *roll, float *pitch, float *yaw);
 
 void IMU_3Axis_Acc(float ax, float ay, float az, float *roll, float *pitch);
 void IMU_3Axis_Gyro(float gx, float gy, float gz, float *roll, float *pitch, float *yaw, float dt);

@@ -18,7 +18,21 @@ extern float leg_height[2]; /* [0]=Left_Leg_Height, [1]=Right_Leg_Height */
 #endif
 volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID=0;/*通知确认PID*/
 uint32_t volatile CAN_Time_Out_Counter=0;/*CAN超时计数器*/
-int CAN_Init_Together(void)
+volatile uint8_t CAN_DriveModeAck = CAN_DRIVE_NONE;
+
+int CAN_SendDriveMode(uint8_t mode)/*向驱动发送模式指令*/
+{
+    CanTxMsg msg = {0};
+    if (mode != CAN_DRIVE_PAUSE && mode != CAN_DRIVE_RESUME) return 0;
+    msg.StdId = CAN_DRIVE_MODE_ID;
+    msg.IDE = CAN_Id_Standard;
+    msg.RTR = CAN_RTR_Data;
+    msg.DLC = 1;
+    msg.Data[0] = mode;
+    return CAN_Transmit(CAN1, &msg) != CAN_TxStatus_NoMailBox;
+}
+
+int CAN_Init_Together(void)/*初始化CAN*/
 {
     RCC_ClocksTypeDef clocks;
     GPIO_InitTypeDef gpio;
@@ -68,7 +82,7 @@ int CAN_Init_Together(void)
 #endif
     filter.CAN_FilterIdLow = 0;
 #if Central_Driver
-    filter.CAN_FilterMaskIdHigh = 0xFFE0u; /* 精确匹配11位标准ID */
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 轮速0x200和模式确认0x201 */
 #else
     filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配10位标准ID,忽略最低位 */
 #endif
@@ -188,6 +202,12 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
     /* FIFO最多3帧：本次处理入口时已有的帧，新到的留给下一次中断。 */
     while (count--) {
         CAN_Receive(CAN1, CAN_FIFO0, &msg); /* 读取并释放FIFO项 */
+        if (msg.StdId == CAN_DRIVE_MODE_ACK_ID && msg.IDE == CAN_Id_Standard &&
+            msg.RTR == CAN_RTR_Data && msg.DLC == 1 &&
+            (msg.Data[0] == CAN_DRIVE_PAUSE || msg.Data[0] == CAN_DRIVE_RESUME)) {
+            CAN_DriveModeAck = msg.Data[0];
+            continue;
+        }
 			#if Central_Driver
 				if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 8)
@@ -251,4 +271,17 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 		}
      #endif
 	}
+}
+
+int CAN_TakeWheelSpeed(float rpm[2])
+{
+    int ready;
+    NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);/*确保读到的是同一时刻的轮速*/
+    ready = if_We_Should_Infrom_Main_Function_to_PID != 0;
+    if (ready) {
+        rpm[0] = Speed[0]; rpm[1] = Speed[1];
+        if_We_Should_Infrom_Main_Function_to_PID = 0;
+    }
+    NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
+    return ready;
 }

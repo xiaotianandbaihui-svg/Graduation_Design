@@ -3,6 +3,16 @@
 
 #include <stdint.h>
 
+/* 模式切换单独握手；暂停确认之后，跳跃期间不再发送周期控制帧。 */
+#define CAN_DRIVE_MODE_ID      0x102u
+#define CAN_DRIVE_MODE_ACK_ID  0x201u
+#define CAN_DRIVE_NONE        0u
+#define CAN_DRIVE_PAUSE       1u
+#define CAN_DRIVE_RESUME      2u
+extern volatile uint8_t CAN_DriveModeAck;
+int CAN_SendDriveMode(uint8_t mode);
+
+
 /* 主控端：STM32F103C8T6，PA11=RX、PA12=TX，500 kbit/s。 */
 #define CAN_ANGLE_LEGHEIGHT_ID 0x101u  /* 发送当前的角度和当前腿高 */
 #define CAN_TARGET_ANGLE_ID    0x100u	 /*发送目标角度*/
@@ -14,7 +24,7 @@ int CAN_Init_Together(void);
 
 /* 原子取走一帧左右轮速并清通知；1有新帧，0无新帧且不修改rpm。
  * rpm[0]=左轮，rpm[1]=右轮，方向仍为各电机电角度正方向。
- * 当前协议int16*0.01 rpm，只能表示[-327.68,327.67] rpm。 */
+ * 当前协议为两个int32小端，单位0.01 rpm，共8字节。 */
 int CAN_TakeWheelSpeed(float rpm[2]);
 
 /* 第一包：Pitch、Yaw、左腿高、右腿高，四个int16小端，共8字节；

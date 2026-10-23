@@ -1,13 +1,18 @@
-/* 状态仅由主循环修改；中断只提交请求，不直接切换控制模式。 */
 #ifndef GLOBAL_STATE_H
 #define GLOBAL_STATE_H
 
+/* 唯一的控制状态；仅主循环修改。跳跃各阶段也用它，不再另设锁或phase。 */
 typedef enum {
-    ROBOT_NORMAL,   /* 普通PID控制，包括静止和运动；允许开始跳跃 */
-    ROBOT_JUMPING,  /* 跳跃独占足端输出，完成恢复后才回到普通状态 */
-    ROBOT_FAULT     /* 故障停机，须检查后重启；跳跃接口不能清除故障 */
+    ROBOT_NORMAL,
+    ROBOT_JUMP_SQUAT,       /* 下蹲等待 */
+    ROBOT_JUMP_PUSH,        /* 蹬伸，检测离地 */
+    ROBOT_JUMP_RETRACT,     /* 空中收腿 */
+    ROBOT_JUMP_LAND,        /* 中间高度，等待触地 */
+    ROBOT_JUMP_BUFFER,      /* 触地后逐步收腿 */
+    ROBOT_JUMP_LOW_HOLD,    /* 最短位置等待 */
+    ROBOT_JUMP_RECOVER,     /* 恢复中间高度并等待舵机 */
+    ROBOT_FAULT
 } RobotState;
 
 extern RobotState Robot_State;
-
 #endif

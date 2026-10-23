@@ -82,17 +82,26 @@ void TIM3_IRQHandler(void)
 }
 
 
+typedef enum { DRIVE_FEEDBACK, DRIVE_TARGET, DRIVE_PAUSED } DriveStage;
+
+static void Drive_Fault(const char *message)
+{
+    SVPWM_Stop(0); SVPWM_Stop(1);
+    Balance_Stop(&for_balance_pitch); Balance_Stop(&for_balance_yaw);
+    while (1) { printf("%s\n", message); Delay_ms(500); }
+}
+
 #if (Formal==1)
 int main(void)
 {
 	/*串口初始化*/
 	Serial_Init();		//串口初始化
-	TLE5012B_BusInit(); /* 先配置SPI1和两路片选，Motor_init内再检查编码器。 */
+	TLE5012B_BusInit(); /* 先配置SPI2和两路片选，Motor_init内再检查编码器。 */
 	/*特别注意，轮子需要校准，所以请先把车子拿起来，不然很可能导致车子直接和你Say Good_Bye，你也不想他变为牢大吧！！！*/
 	if (!Motor_init()) {
 		while (1) { printf("Motor init failed\n"); Delay_ms(500); }
 	}
-	CAN_Init_Together();/*初始化CAN总线*/
+	if (!CAN_Init_Together()) Drive_Fault("CAN init failed");
 	/*初始化pitch的PID控制器*/
 	Balance_Init(0,&for_balance_pitch);
 	Balance_Start(&for_balance_pitch);//开启PID，放心，这里只是把积分项啊这些东西全部清零了
@@ -137,16 +146,39 @@ int main(void)
 	
 	float angle_speed_1=0;
 	float angle_speed_2=0;
-	uint8_t first_PID_update=0;//标记第一次PID更新，用于给dir1和dir2赋值，第一次赋初始值后就自动赋值了
-	uint8_t stage=0;//标记当前收发数据的阶段，0,对应第一包数据，1对应第二包数据
+	DriveStage stage = DRIVE_FEEDBACK;
 	while (1)
 	{	
+        uint8_t mode;
+        NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
+        mode = CAN_DriveCommand;
+        CAN_DriveCommand = CAN_DRIVE_NONE;
+        NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
+        if (mode != CAN_DRIVE_NONE) {
+            SVPWM_Stop(0); SVPWM_Stop(1);
+            Balance_Stop(&for_balance_pitch); Balance_Stop(&for_balance_yaw);
+            pid_output[0] = pid_output[1] = 0;
+            if_We_Should_Infrom_Main_Function_to_PID = 0;
+            CAN_Time_Out_Counter = 0;
+            stage = DRIVE_PAUSED;
+            if (mode == CAN_DRIVE_RESUME) {
+                if (!Balance_Start(&for_balance_pitch) || !Balance_Start(&for_balance_yaw))
+                    Drive_Fault("PID restart failed");
+                stage = DRIVE_FEEDBACK; /* 必须重新收齐姿态和目标，旧PWM不能恢复 */
+            }
+            while (!CAN_SendDriveModeAck(mode))
+                if (CAN_Time_Out_Counter > CAN_Time_Out_Threshold) Drive_Fault("Mode ACK failed");
+        }
+        if (stage == DRIVE_PAUSED) {
+            CAN_Time_Out_Counter = 0; /* 跳跃期间冻结超时监测，继续接收恢复命令。 */
+            continue; /* PID已停止、PWM已关闭；不更新输出，也不回传轮速。 */
+        }
 		if(go==1)
 		{
 			/*这里是主循环，主要是读取角度和轮子速度，然后进行PID计算，最后输出给SVPWM_Update函数*/
-			if(if_We_Should_Infrom_Main_Function_to_PID==0x01&&stage==0)
+			if(if_We_Should_Infrom_Main_Function_to_PID==0x01&&stage==DRIVE_FEEDBACK)
 			{
-				stage=1;
+				stage=DRIVE_TARGET;
 				if(Balance_ReadFeedback(&angle_speed_1,&angle_speed_2)==0)/*读取轮子速度，单位：rpm*/
 				{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
@@ -188,9 +220,9 @@ int main(void)
 				/*PID参数更新结束*/			
 				#endif
 			}
-			else if(if_We_Should_Infrom_Main_Function_to_PID==0x03&&stage==1)
+			else if(if_We_Should_Infrom_Main_Function_to_PID==0x03&&stage==DRIVE_TARGET)
 			{
-				stage=0;//回到读取第一包
+				stage=DRIVE_FEEDBACK;//回到读取第一包
 				for_balance_pitch.upright_deg=target_angle[0];/*设置目标角度*/
 				for_balance_yaw.upright_deg=target_angle[1];/*设置目标角度*/
 				if_We_Should_Infrom_Main_Function_to_PID=0;
@@ -223,13 +255,11 @@ int main(void)
 				else if(pid_output[1]<-Output_limit)
 					pid_output[1]=-Output_limit;
 				
-				pid_output[0]>=0?(dir1=1):(dir1=-1);
-				pid_output[1]>=0?(dir2=1):(dir2=-1);
-				first_PID_update=1;
 			}
 			/*这里不需要加延时，这不是陀螺仪，其实按照编码器的最大速度读就好，这里可能读到旧的，但是无妨*/
 			/*粗心大意得你，别忘了，这里有开关！！*/
-			if(first_PID_update!=0)
+            dir1 = pid_output[0] >= 0 ? 1 : -1;
+            dir2 = pid_output[1] >= 0 ? 1 : -1;
 			SVPWM_Update(dir1*car_forward_electircal_forward_1,dir2*car_forward_electircal_forward_2,abs(pid_output[0]),abs(pid_output[1]));/*这里可能因为读取过快读到旧的角度，但是咱们的主频
 			才72Mhz，况且中间还有SPI的读写周期，基本读不了几下旧数据，就算读到了也不过是保持输出磁矢量不变*/
 

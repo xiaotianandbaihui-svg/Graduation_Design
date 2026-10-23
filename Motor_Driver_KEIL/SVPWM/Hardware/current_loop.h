@@ -5,7 +5,8 @@
 
 /* 有位置传感器的FOC电流环：Clarke -> Park -> d/q双PI -> 逆Park。
  * 每台电机一个CurrentLoop对象；无ADC、GPIO、定时器或现有主循环依赖。
- * 当前硬件没有电流采样：本文件只提供逻辑，底层空接口默认报告失败。
+ * 新版板5已有current_sense采样接口；本文件仍只提供逻辑，空接口默认失败。
+ * 尚未接入PWM同步采样、母线电压反馈和电压输出适配，不自动启用电流闭环。
  */
 typedef struct {
     float kp_d, ki_d;          /* Kp: V/A；Ki: V/(A*s)，积分显式乘周期 */

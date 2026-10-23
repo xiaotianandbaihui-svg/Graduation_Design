@@ -120,7 +120,7 @@ failed:
 }
 
 #ifndef CURRENT_LOOP_EXTERNAL_IO
-/* 当前板子没有电流采样，以下函数故意返回失败，不伪造反馈或驱动电机。 */
+/* 尚未接通完整的同步反馈/电压输出链路，以下空接口仍返回失败。 */
 int CurrentLoop_ReadFeedback(uint8_t motor_id, CurrentLoop_Feedback *feedback)
 {
     (void)motor_id;

@@ -4,11 +4,11 @@
 #include <stdint.h>
 
 /* TLE5012B芯片本身使用双向DATA。
- * 1：接收时把PA7改为浮空输入，MISO/PA6仍负责读取（默认）。
- * 0：全程保持PA7复用输出；只适用于已确认支持此方式的模块适配电路。
+ * 1：接收时把PB15改为浮空输入，MISO/PB14仍负责读取（默认）。
+ * 0：全程保持PB15复用输出；只适用于已确认支持此方式的模块适配电路。
  * 成品板有MOSI/MISO接口不代表可以省略释放；应以模块原理图为准。
- * 使用1时要求模块在PA7释放后仍能把DATA送到PA6。
- * 这不重配SPI1，只在传输中切换PA7的GPIO模式。 */
+ * 使用1时要求模块在PB15释放后仍能把DATA送到PB14。
+ * 这不重配SPI2，只在传输中切换PB15的GPIO模式。 */
 #ifndef TLE5012B_RELEASE_MOSI
 #define TLE5012B_RELEASE_MOSI 1
 #endif
@@ -36,11 +36,11 @@ typedef enum {
     TLE_CONFIG_ERROR = -6
 } TLE_Result;
 
-/* 上电先调用一次BusInit，配置两颗编码器共用的SPI1及片选并等待10ms。
- * SPI1：主机、16位、MSB先、CPOL=Low、CPHA=2Edge、双线全双工、软件NSS。
- * PA5=SCK，PA6=MISO，PA7=MOSI；默认推挽SSC时SCK不超过8MHz。
+/* 上电先调用一次BusInit，配置两颗编码器共用的SPI2及片选并等待10ms。
+ * SPI2：主机、16位、MSB先、CPOL=Low、CPHA=2Edge、双线全双工、软件NSS。
+ * PB13=SCK，PB14=MISO，PB15=MOSI；默认推挽SSC时SCK不超过8MHz。
  * id=0：CS为PA4；id=1：CS为PB1。未选中的CS保持高。
- * Init/Read/Write只访问编码器，不重新配置SPI1，也不执行电机控制。
+ * Init/Read/Write只访问编码器，不重新配置SPI2，也不执行电机控制。
  * 同一SPI总线不可被其他中断/任务同时使用。 */
 
 void TLE5012B_BusInit(void);

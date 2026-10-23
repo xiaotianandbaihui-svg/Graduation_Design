@@ -29,28 +29,31 @@ typedef enum {
     SIX_STEP_DRIVER_FAULT = -4,
     SIX_STEP_ENCODER_ERROR = -5,
     SIX_STEP_CALIBRATION_ERROR = -6,
-    SIX_STEP_CLOCK_ERROR = -7
+    SIX_STEP_CLOCK_ERROR = -7,
+    SIX_STEP_CURRENT_SENSE_ERROR = -8
 } SixStep_Result;
 
 /* STM32F103C8T6标准库 + DRV8323H，MODE必须接地（6PWM）。
- * 接线沿用2026-09-29板1网络表；若实物改线，修改six_step.c的引脚表。
+ * 接线对应2026-10-23板5；本方案须将MODE电阻实装0Ω，不与3PWM混用。
  * id          0 / 电机1             1 / 电机2
  * INHA/B/C    PA1/PA2/PA3           PB7/PB8/PB9
  *             TIM2_CH2/3/4         TIM4_CH2/3/4
- * INLA/B/C    PB12/PB13/PB14        PB15/PB3/PA15
+ * INLA/B/C    PB12/PB11/PB10        PB6/PB3/PA15
  * nFAULT      PA8                  PB5（均需板上上拉）
- * ENABLE      PB0，两片共用
+ * ENABLE      PA0，两片共用，板上10kΩ下拉
+ * CAL         PB4，两片共用，正常运行保持低
  *
- * 独占TIM2、TIM4；不使用PA0。关闭JTAG，保留SWD。
+ * 独占TIM2、TIM4；关闭JTAG，保留SWD。
  * PWM时钟须为HCLK=72MHz、PCLK1=36MHz。
  * 延时直接调用你已有的void Delay_us(uint32_t us)，单位微秒；
  * 其实现须在SixStep_Init之前可用，不能占用本模块的TIM2/TIM4。
- * SPI1、编码器CS及上电等待>=10ms由你原有代码完成；本文件不初始化SPI。
+ * SPI2、编码器CS及上电等待>=10ms由你原有代码完成；本文件不初始化SPI。
  * 使用同目录精简版tle5012b.c，不要混入旧目录中的同名驱动。
- * 所有接口在同一执行上下文调用，SPI1也不得被另一任务/中断抢占。
+ * 所有接口在同一执行上下文调用，SPI2也不得被另一任务/中断抢占。
  */
 
-/* 配置双路GPIO/PWM并唤醒驱动器，全部输出保持关闭，不自动转动。
+/* 配置双路GPIO/PWM并唤醒驱动器，初始化current_sense并校准零偏。
+ * 全部输出保持关闭，不自动转动；调用时两轮应静止。
  * 重新调用会停止双路、清除本模块的故障锁存和RAM标定。 */
 SixStep_Result SixStep_Init(void);
 
@@ -86,7 +89,7 @@ void SixStep_StopAll(void);     /* 双路关闭、ENABLE拉低，必须重新Ini
 /* 最小接入（错误返回时不要继续执行下面的步骤）：
  *
  * SixStep_Calibration cal;
- * // 先完成你自己的SPI1、CS GPIO初始化及编码器上电等待。
+ * // 先完成你自己的SPI2、CS GPIO初始化及编码器上电等待。
  * if (SixStep_Init() != SIX_STEP_OK) { ... }
  * if (SixStep_Calibrate(0, 50, &cal) != SIX_STEP_OK) { ... }
  * // 若已有有效标定，则上句改为SixStep_SetCalibration(0, &saved_cal)。

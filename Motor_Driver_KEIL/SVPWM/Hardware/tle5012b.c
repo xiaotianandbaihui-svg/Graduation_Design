@@ -7,14 +7,14 @@
 /* 仅限制等待次数，防止SPI异常时永久卡住，不是精确的微秒超时。 */
 #define SPI_WAIT_LIMIT 10000u
 
-/* 两颗编码器共用SPI1；PA4/PB1分别片选，未选中时保持高。 */
+/* 两颗编码器共用SPI2；PA4/PB1分别片选，未选中时保持高。 */
 void TLE5012B_BusInit(void)
 {
     GPIO_InitTypeDef gpio;
     SPI_InitTypeDef spi;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB |
-                          RCC_APB2Periph_AFIO | RCC_APB2Periph_SPI1, ENABLE);
-    GPIO_PinRemapConfig(GPIO_Remap_SPI1, DISABLE);
+                          RCC_APB2Periph_AFIO, ENABLE);
+    RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
     GPIO_SetBits(GPIOA, GPIO_Pin_4);
     GPIO_SetBits(GPIOB, GPIO_Pin_1);
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
@@ -24,17 +24,17 @@ void TLE5012B_BusInit(void)
     gpio.GPIO_Pin = GPIO_Pin_1;
     GPIO_Init(GPIOB, &gpio);
 
-    gpio.GPIO_Pin = GPIO_Pin_5;
+    gpio.GPIO_Pin = GPIO_Pin_13;
     gpio.GPIO_Mode = GPIO_Mode_AF_PP;
-    GPIO_Init(GPIOA, &gpio);
-    gpio.GPIO_Pin = GPIO_Pin_6;
+    GPIO_Init(GPIOB, &gpio);
+    gpio.GPIO_Pin = GPIO_Pin_14;
     gpio.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-    GPIO_Init(GPIOA, &gpio);
-    gpio.GPIO_Pin = GPIO_Pin_7;
+    GPIO_Init(GPIOB, &gpio);
+    gpio.GPIO_Pin = GPIO_Pin_15;
     gpio.GPIO_Mode = TLE5012B_RELEASE_MOSI ? GPIO_Mode_IN_FLOATING : GPIO_Mode_AF_PP;
-    GPIO_Init(GPIOA, &gpio);
+    GPIO_Init(GPIOB, &gpio);
 
-    SPI_I2S_DeInit(SPI1);
+    SPI_I2S_DeInit(SPI2);
     SPI_StructInit(&spi);
     spi.SPI_Direction = SPI_Direction_2Lines_FullDuplex;
     spi.SPI_Mode = SPI_Mode_Master;
@@ -42,11 +42,11 @@ void TLE5012B_BusInit(void)
     spi.SPI_CPOL = SPI_CPOL_Low;
     spi.SPI_CPHA = SPI_CPHA_2Edge;
     spi.SPI_NSS = SPI_NSS_Soft;
-    spi.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_16; /* PCLK2=72MHz时为4.5MHz */
+    spi.SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_8; /* PCLK1=36MHz时为4.5MHz */
     spi.SPI_FirstBit = SPI_FirstBit_MSB;
-    SPI_Init(SPI1, &spi);
-    SPI_NSSInternalSoftwareConfig(SPI1, SPI_NSSInternalSoft_Set);
-    SPI_Cmd(SPI1, ENABLE);
+    SPI_Init(SPI2, &spi);
+    SPI_NSSInternalSoftwareConfig(SPI2, SPI_NSSInternalSoft_Set);
+    SPI_Cmd(SPI2, ENABLE);
     Delay_ms(10u);
 }
 
@@ -64,36 +64,36 @@ static void CS(uint8_t id, int high)
     else GPIO_ResetBits(port, pin);
 }
 
-/* 双向DATA模式：发命令时驱动PA7，接收时释放PA7，让编码器驱动DATA。 */
+/* 双向DATA模式：发命令时驱动PB15，接收时释放PB15，让编码器驱动DATA。 */
 static void DATA_Output(int enable)
 {
 #if TLE5012B_RELEASE_MOSI
     GPIO_InitTypeDef gpio;
-    gpio.GPIO_Pin = GPIO_Pin_7;
+    gpio.GPIO_Pin = GPIO_Pin_15;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     gpio.GPIO_Mode = enable ? GPIO_Mode_AF_PP : GPIO_Mode_IN_FLOATING;
-    GPIO_Init(GPIOA, &gpio);
+    GPIO_Init(GPIOB, &gpio);
 #else
     (void)enable;
 #endif
 }
 
-/* 一个16位字的收发：直接使用SPI1标准库函数。 */
-static TLE_Result SPI1_Word(uint16_t tx, uint16_t *rx)
+/* 一个16位字的收发：直接使用SPI2标准库函数。 */
+static TLE_Result SPI2_Word(uint16_t tx, uint16_t *rx)
 {
     uint32_t wait = SPI_WAIT_LIMIT;
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_TXE) == RESET)
+    while (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_TXE) == RESET)
         if (--wait == 0u) return TLE_SPI_TIMEOUT;
 
-    SPI_I2S_SendData(SPI1, tx);
+    SPI_I2S_SendData(SPI2, tx);
 
     wait = SPI_WAIT_LIMIT;
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_RXNE) == RESET)
+    while (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_RXNE) == RESET)
         if (--wait == 0u) return TLE_SPI_TIMEOUT;
-    *rx = SPI_I2S_ReceiveData(SPI1);
+    *rx = SPI_I2S_ReceiveData(SPI2);
 
     wait = SPI_WAIT_LIMIT;
-    while (SPI_I2S_GetFlagStatus(SPI1, SPI_I2S_FLAG_BSY) == SET)
+    while (SPI_I2S_GetFlagStatus(SPI2, SPI_I2S_FLAG_BSY) == SET)
         if (--wait == 0u) return TLE_SPI_TIMEOUT;
     return TLE_OK;
 }
@@ -129,20 +129,20 @@ static TLE_Result Transfer(uint8_t id, uint16_t command, uint16_t *value)
     CS(id, 0);
     SSC_Gap();
 
-    result = SPI1_Word(command, &discard);
+    result = SPI2_Word(command, &discard);
     if (result != TLE_OK) goto finish;
     if (!reading) {
-        result = SPI1_Word(data, &discard);   /* 写：先把数据发给编码器 */
+        result = SPI2_Word(data, &discard);   /* 写：先把数据发给编码器 */
         if (result != TLE_OK) goto finish;
     }
 
     DATA_Output(0);
     SSC_Gap();
     if (reading) {
-        result = SPI1_Word(0xFFFFu, &data);  /* 读：发送占位字以产生16个时钟 */
+        result = SPI2_Word(0xFFFFu, &data);  /* 读：发送占位字以产生16个时钟 */
         if (result != TLE_OK) goto finish;
     }
-    result = SPI1_Word(0xFFFFu, &safety);     /* 读、写都要接收安全字 */
+    result = SPI2_Word(0xFFFFu, &safety);     /* 读、写都要接收安全字 */
     if (result != TLE_OK) goto finish;
 
     if (CRC8(command, data) != (uint8_t)safety) {

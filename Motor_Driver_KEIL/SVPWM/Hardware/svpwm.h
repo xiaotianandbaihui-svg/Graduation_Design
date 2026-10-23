@@ -25,18 +25,19 @@ int8_t SVPWM_GetEncoderSign(uint8_t id);
  * id        0（电机1）               1（电机2）
  * INHA/B/C  PA1/PA2/PA3              PB7/PB8/PB9
  *           TIM2_CH2/3/4             TIM4_CH2/3/4
- * INLA/B/C  PB12/PB13/PB14           PB15/PB3/PA15
+ * INLA/B/C  PB12/PB11/PB10           PB6/PB3/PA15
  * nFAULT    PA8                     PB5
- * ENABLE    PB0，两片共用
+ * ENABLE    PA0，两片共用，板上10kΩ下拉
+ * CAL       PB4，两片共用，正常运行保持低
  *
  * 独占TIM2/TIM4，关闭JTAG、保留SWD；不配置系统时钟或中断。
- * SPI1、CS GPIO沿用你已有的初始化，参见tle5012b.h。
+ * SPI2、CS GPIO沿用你已有的初始化，参见tle5012b.h。
  * 使用已有Delay_us/Delay_ms，延时不能占用TIM2/TIM4。
  * 不与six_step.c同时运行；所有接口由同一执行上下文串行调用。
  */
 
 /* 唯一电机初始化入口，返回1全部成功、0失败并关闭双路。
- * 自动完成PWM/GPIO初始化、两颗编码器检查，再逐个标定电机：
+ * 自动完成PWM/GPIO及电流采样初始化、两颗编码器检查，再逐个标定电机：
  * 0度矢量对齐并记录零点 -> 保持通电直接切90度 -> 等待稳定
  * -> 计算跨零修正后的机械角增量，核对大小并取符号 -> 高阻停止。
  * 对7极对数，机械增量应约±12.86度，允许±10%作为有效位移判据。
@@ -47,7 +48,8 @@ int8_t SVPWM_GetEncoderSign(uint8_t id);
  
 int Motor_init(void);  /*直接调用这个函数即可，返回值：1  成了 0： 寄了*/
 
-/* 底层PWM/GPIO初始化：不做标定，结束后高阻，清除旧标定。
+/* 底层PWM/GPIO及ADC初始化：做电流零偏校准，不做转子标定。
+ * 结束后高阻，清除旧转子标定；上电时两轮应静止，以免零偏受发电电流影响。
  * Motor_init已经调用它；日常无需另外调用。 */
 int SVPWM_Init(void);
 

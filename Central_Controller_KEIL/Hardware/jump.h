@@ -9,10 +9,9 @@
 /* 共用leg_ik中的杆长、舵机安装偏置和统一足端接口，不另设一套舵机映射。
  * +y向下：LOW为最短腿，HIGH为最长腿。NAN项必须实测填写后才允许启动。 */
 #ifndef JUMP_EXTERNAL_CONFIG
-#define JUMP_X_MM              FOOT_INITIAL_X_MM
-#define JUMP_MID_MM            FOOT_INITIAL_Y_MM /* 普通模式的名义中间腿高，修改balance_pid.h */
-#define JUMP_LOW_MM            NAN               /* 下蹲/空中收腿/缓冲终点，单位mm，待实测 */
-#define JUMP_HIGH_MM           NAN               /* 蹬伸目标，单位mm，待实测 */
+#define JUMP_MID_MM            FOOT_INITIAL_Y_MM /* 跳跃中间/恢复位置的两腿平均高度，mm */
+#define JUMP_LOW_MM            NAN               /* 最短单腿的下限，mm；两腿等量收缩至短腿到此值 */
+#define JUMP_HIGH_MM           NAN               /* 最长单腿的上限，mm；两腿等量伸长至长腿到此值 */
 #define JUMP_SQUAT_MS          300u              /* 下蹲后的舵机等待时间，这个是用来等待的 */
 #define JUMP_PUSH_MIN_MS        40u              /* 蹬伸后最短等待，之后才判断离地 */
 #define JUMP_PREP_DELAY_MS      80u              /* 收腿后等多久放回中间位置，待实测 */
@@ -36,16 +35,11 @@
 /* 遥控/调试入口：置1请求跳跃，由主循环消费；只在普通模式受理。 */
 extern volatile uint8_t Jump_Request;
 
-/* 仅用于启动前检查目标，使用与Leg_SetFootPositions相同的机构和安装偏置。 */
-uint8_t Get_Angles(float x_mm, float y_mm, float angle[4]);
-
-/* 阶段：下蹲 -> 蹬伸/等离地 -> 收腿 -> 中间高度/等触地/逐步缓冲 -> 恢复。
- * Start进入ROBOT_JUMPING，恢复完成后回到ROBOT_NORMAL；重复Start或Stop不会打断动作。
- * Update使用主循环本周期的加速度模长(g)，不重复读取SPI。
- * 动作开始后失败进入ROBOT_FAULT，须停机检查后重启；所有跳跃接口都不能清除故障。
- * 阶段切换允许直接下发大角度目标；普通PID步长限幅仍保持不变。 */
+/* Start前须确认驱动板已暂停。冻结当前x和左右高度差；三组目标都合法才下发。
+ * 重复Start不重启动作；Update每周期接收一份新的加速度模长(g)。
+ * 动作失败进入ROBOT_FAULT，不能自动恢复；无单独的锁、phase或运行标志。
+ * LANDED只在恢复完成的那次调用返回，表示指令等待结束，不是机械位置反馈。 */
 int8_t Jump_Start(uint32_t now_ms);
 int8_t Jump_Update(uint32_t now_ms, float accel_g);
-void Jump_Stop(void); /* 仅在普通状态清除结果；不能打断跳跃或清除故障 */
 
 #endif

@@ -4,6 +4,33 @@
 
 /*用于存储姿态的四元数*/
 float q0 = 1.0f, q1 = 0.0f, q2 = 0.0f, q3 = 0.0f;
+static float exInt9, eyInt9, ezInt9;
+
+int IMU_ResetAttitude(float ax, float ay, float az, float mx, float my, float mz,
+                      float *roll, float *pitch, float *yaw)
+{
+    float r, p, y, hx, hy, cr, sr, cp, sp, cy, sy;
+    float norm = sqrtf(ax*ax + ay*ay + az*az);
+    if (!isfinite(norm) || norm < 0.000001f) return 0;
+    Mag_Apply_Calibration(&mx, &my, &mz);
+    r = atan2f(ay, az);
+    p = atan2f(-ax, hypotf(ay, az));
+    hx = mx*cosf(p) + (my*sinf(r) + mz*cosf(r))*sinf(p);
+    hy = my*cosf(r) - mz*sinf(r);
+    norm = hypotf(hx, hy);
+    if (!isfinite(norm) || norm < 0.000001f) return 0;
+    y = atan2f(-hy, hx);
+    cr = cosf(r*0.5f); sr = sinf(r*0.5f);
+    cp = cosf(p*0.5f); sp = sinf(p*0.5f);
+    cy = cosf(y*0.5f); sy = sinf(y*0.5f);
+    q0 = cy*cp*cr + sy*sp*sr;
+    q1 = cy*cp*sr - sy*sp*cr;
+    q2 = cy*sp*cr + sy*cp*sr;
+    q3 = sy*cp*cr - cy*sp*sr;
+    exInt9 = eyInt9 = ezInt9 = 0;
+    *roll = r*RAD_TO_DEG; *pitch = p*RAD_TO_DEG; *yaw = y*RAD_TO_DEG;
+    return 1;
+}
 
 /**
   * 函    数：姿态四元数初始化
@@ -188,7 +215,6 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
                           float *roll, float *pitch, float *yaw, float dt)
 {
     const float Kp = 0.5f, Ki = 0.01f;
-    static float exInt, eyInt, ezInt;
     float norm, ex = 0.0f, ey = 0.0f, ez = 0.0f;
     float ix, iy, iz, n0, n1, n2, n3, sin_pitch;
     float q0q1 = q0*q1, q0q2 = q0*q2, q0q3 = q0*q3;
@@ -234,7 +260,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
         ez += mx*wy - my*wx;
     }
 
-    ix = exInt + ex*dt; iy = eyInt + ey*dt; iz = ezInt + ez*dt;
+    ix = exInt9 + ex*dt; iy = eyInt9 + ey*dt; iz = ezInt9 + ez*dt;
     gx = gx*DEG_TO_RAD + Kp*ex + Ki*ix;
     gy = gy*DEG_TO_RAD + Kp*ey + Ki*iy;
     gz = gz*DEG_TO_RAD + Kp*ez + Ki*iz;
@@ -247,7 +273,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     norm = sqrtf(n0*n0 + n1*n1 + n2*n2 + n3*n3);
     if (!isfinite(norm) || norm <= 0.000001f) return 0;
     q0 = n0/norm; q1 = n1/norm; q2 = n2/norm; q3 = n3/norm;
-    exInt = ix; eyInt = iy; ezInt = iz;
+    exInt9 = ix; eyInt9 = iy; ezInt9 = iz;
 
     sin_pitch = 2.0f*(q0*q2 - q1*q3);
     sin_pitch = fmaxf(-1.0f, fminf(1.0f, sin_pitch));
@@ -257,7 +283,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     return 1;
 }
 
-
+/*磁力计校准程序*/
 typedef struct {
     float bias[3];      // 硬铁偏置 (offset)
     float scale[3];     // 各轴缩放系数
