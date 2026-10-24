@@ -146,9 +146,12 @@ int main(void)
 	
 	float angle_speed_1=0;
 	float angle_speed_2=0;
+
 	DriveStage stage = DRIVE_FEEDBACK;
+
 	while (1)
 	{	
+		/*状态锁死*/
         uint8_t mode;
         NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
         mode = CAN_DriveCommand;
@@ -173,6 +176,10 @@ int main(void)
             CAN_Time_Out_Counter = 0; /* 跳跃期间冻结超时监测，继续接收恢复命令。 */
             continue; /* PID已停止、PWM已关闭；不更新输出，也不回传轮速。 */
         }
+		
+
+
+		/*跳跃停机*/
 		if(go==1)
 		{
 			/*这里是主循环，主要是读取角度和轮子速度，然后进行PID计算，最后输出给SVPWM_Update函数*/

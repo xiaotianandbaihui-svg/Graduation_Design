@@ -91,6 +91,17 @@ int CAN_Init_Together(void)/*初始化CAN*/
     filter.CAN_FilterActivation = ENABLE;
     CAN_FilterInit(&filter);
 
+	filter.CAN_FilterNumber = 1;
+    filter.CAN_FilterMode = CAN_FilterMode_IdMask;
+    filter.CAN_FilterScale = CAN_FilterScale_32bit;
+    filter.CAN_FilterIdHigh = (uint16_t)(CAN_TARGET_ANGLE_ID << 5);/*这里主要是为了筛选出0x101*/
+    filter.CAN_FilterIdLow = 0;
+    filter.CAN_FilterMaskIdHigh = 0xFFC0u; /* 精确匹配模式指令 ，匹配10位ID*/
+    filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
+    filter.CAN_FilterFIFOAssignment = CAN_Filter_FIFO0;
+    filter.CAN_FilterActivation = ENABLE;
+    CAN_FilterInit(&filter);
+
     if_We_Should_Infrom_Main_Function_to_PID = 0;
     CAN_Time_Out_Counter = 0;
     NVIC_ClearPendingIRQ(USB_LP_CAN1_RX0_IRQn);
@@ -209,20 +220,16 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
             continue;
         }
         #if Central_Driver
-            if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
+        if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
         msg.RTR == CAN_RTR_Data && msg.DLC == 8)
-            {
-                for (i = 0; i < 2; ++i) {
-                        raw = (int32_t)((uint32_t)msg.Data[4*i] |
-                                                        ((uint32_t)msg.Data[4*i+1] << 8)|((uint32_t)msg.Data[4*i+2] << 16)|((uint32_t)msg.Data[4*i+3] << 24));
-                        Speed[i] = (float)raw / 100.0f;
-                }
-                    if_We_Should_Infrom_Main_Function_to_PID|=0x01;
-
-            }
-        if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
         {
-            CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+            for (i = 0; i < 2; ++i) {
+                    raw = (int32_t)((uint32_t)msg.Data[4*i] |
+                                                    ((uint32_t)msg.Data[4*i+1] << 8)|((uint32_t)msg.Data[4*i+2] << 16)|((uint32_t)msg.Data[4*i+3] << 24));
+                    Speed[i] = (float)raw / 100.0f;
+            }
+            if_We_Should_Infrom_Main_Function_to_PID|=0x01;
+            continue;
         }
 		#else 
         if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
@@ -247,6 +254,7 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 								leg_height[i] = (float)raw / 100.0f;
 						}
 						 if_We_Should_Infrom_Main_Function_to_PID|=0x01;
+                        continue;
 				}
 				/*这里接收目标的目标的角度*/
 				if (msg.StdId == CAN_TARGET_ANGLE_ID && msg.IDE == CAN_Id_Standard &&
@@ -261,17 +269,25 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 								target_angle[i] = (float)raw / 100.0f;
 						}
 						if_We_Should_Infrom_Main_Function_to_PID|=0x02;
+                        continue;
 						
 				}
+        #endif                
 		}
+
+        #if Central_Driver
+        if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
+        {
+            CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+        }
+        #else
 		if(if_We_Should_Infrom_Main_Function_to_PID==0x03)
 		{
             CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
-            Its_Time_to_PID = 1; /* Pitch、Yaw全部更新且得到了目标角度，才通知主循环处理。 */
 		}
-     #endif
-	}
+        #endif
 }
+
 
 int CAN_TakeWheelSpeed(float rpm[2])
 {

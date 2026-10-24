@@ -88,7 +88,7 @@ int CAN_Init_Together(void)
 		filter.CAN_FilterNumber = 1;
     filter.CAN_FilterMode = CAN_FilterMode_IdMask;
     filter.CAN_FilterScale = CAN_FilterScale_32bit;
-    filter.CAN_FilterIdHigh = (uint16_t)(CAN_DRIVE_MODE_ID << 5);
+    filter.CAN_FilterIdHigh = (uint16_t)(CAN_DRIVE_MODE_ID << 5);/*专门收模式转化请求*/
     filter.CAN_FilterIdLow = 0;
     filter.CAN_FilterMaskIdHigh = 0xFFE0u; /* 精确匹配模式指令 */
     filter.CAN_FilterMaskIdLow = 0x0006u; /* IDE=0、RTR=0，只收标准数据帧 */
@@ -181,7 +181,7 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
         if (msg.StdId == CAN_DRIVE_MODE_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 1 &&
             (msg.Data[0] == CAN_DRIVE_PAUSE || msg.Data[0] == CAN_DRIVE_RESUME)) {
-            CAN_DriveCommand = msg.Data[0];
+            CAN_DriveCommand = msg.Data[0];/*记录当前的驱动命令 */
             continue;
         }
 			#if Central_Driver
@@ -196,10 +196,6 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
             if_We_Should_Infrom_Main_Function_to_PID|=0x01;
 
 				}
-        if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
-		    {
-        CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
-		    }
 				#else 
         if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 8)
@@ -241,8 +237,15 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
 				}
 				#endif
 		}
+    #if Central_Driver
+    if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
+    {
+        CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+    }
+    #else
 		if(if_We_Should_Infrom_Main_Function_to_PID==0x03)
 		{
         CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
 		}
+    #endif
 }

@@ -6,6 +6,7 @@
 /* 模式切换单独握手；暂停确认之后，跳跃期间不再发送周期控制帧。 */
 #define CAN_DRIVE_MODE_ID      0x102u
 #define CAN_DRIVE_MODE_ACK_ID  0x201u
+
 #define CAN_DRIVE_NONE        0u
 #define CAN_DRIVE_PAUSE       1u
 #define CAN_DRIVE_RESUME      2u

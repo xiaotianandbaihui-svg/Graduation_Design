@@ -35,7 +35,7 @@ float imu963ra_mag_x_transition,  imu963ra_mag_y_transition,  imu963ra_mag_z_tra
 extern volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID;/*定时器触发发送消息到驱动后，驱动立刻回传轮子转速数值，之后进入主控进行PID得到对应的目标Pitch，再把目标角度回传回去，给驱动做PID*/
 extern volatile uint32_t CAN_Time_Out_Counter;/*CAN超时计数器*/
 
-#define Formal 1
+#define Formal 2
 #define Central_Driver 1
 
 
