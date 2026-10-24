@@ -43,7 +43,7 @@ extern volatile uint32_t CAN_Time_Out_Counter;/*CAN超时计数器*/
 float angle[3];                      /* Pitch、Yaw、Roll，度；仅主循环写 */
 volatile float Speed[2]={0};//双轮转速,单位是：rpm
 /* TIM2累计毫秒，可自然回绕；跳跃按无符号差值计时，不清零这个公共时钟。 */
-static volatile uint32_t control_time_ms;
+static volatile uint32_t control_time_ms;/*一个全局时钟，允许回绕。。*/
 volatile uint8_t flag_to_update;/*到时间就发送角度*/
 /* 初始目标采用合法工作区内的宏；首次下发成功后表示最近一次指令位置。 */
  float current_leg_height[2]={FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};/*足端Y位置初始化*/

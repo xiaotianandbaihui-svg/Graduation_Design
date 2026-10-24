@@ -205,25 +205,25 @@ void USB_LP_CAN1_RX0_IRQHandler(void)
         if (msg.StdId == CAN_DRIVE_MODE_ACK_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 1 &&
             (msg.Data[0] == CAN_DRIVE_PAUSE || msg.Data[0] == CAN_DRIVE_RESUME)) {
-            CAN_DriveModeAck = msg.Data[0];
+            CAN_DriveModeAck = msg.Data[0];/*这里设置标志位的目的呢，就是通过这个标志位来通知主控板，驱动板的驱动模式已经改变 */
             continue;
         }
-			#if Central_Driver
-				if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
-            msg.RTR == CAN_RTR_Data && msg.DLC == 8)
-				{
-                    for (i = 0; i < 2; ++i) {
-                            raw = (int32_t)((uint32_t)msg.Data[4*i] |
-                                                            ((uint32_t)msg.Data[4*i+1] << 8)|((uint32_t)msg.Data[4*i+2] << 16)|((uint32_t)msg.Data[4*i+3] << 24));
-                            Speed[i] = (float)raw / 100.0f;
-                    }
-                        if_We_Should_Infrom_Main_Function_to_PID|=0x01;
+        #if Central_Driver
+            if(msg.StdId == CAN_SPEED_ID && msg.IDE == CAN_Id_Standard &&
+        msg.RTR == CAN_RTR_Data && msg.DLC == 8)
+            {
+                for (i = 0; i < 2; ++i) {
+                        raw = (int32_t)((uint32_t)msg.Data[4*i] |
+                                                        ((uint32_t)msg.Data[4*i+1] << 8)|((uint32_t)msg.Data[4*i+2] << 16)|((uint32_t)msg.Data[4*i+3] << 24));
+                        Speed[i] = (float)raw / 100.0f;
+                }
+                    if_We_Should_Infrom_Main_Function_to_PID|=0x01;
 
-				}
-            if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
-		    {
-                CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
-		    }
+            }
+        if(if_We_Should_Infrom_Main_Function_to_PID==0x01)
+        {
+            CAN_Time_Out_Counter=0;/*CAN超时计数器清零*/
+        }
 		#else 
         if (msg.StdId == CAN_ANGLE_LEGHEIGHT_ID && msg.IDE == CAN_Id_Standard &&
             msg.RTR == CAN_RTR_Data && msg.DLC == 8)
