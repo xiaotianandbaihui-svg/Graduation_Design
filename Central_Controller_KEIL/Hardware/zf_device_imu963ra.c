@@ -477,7 +477,7 @@ uint8_t imu963ra_init (void)
         imu963ra_write_acc_gyro_register(IMU963RA_FUNC_CFG_ACCESS, 0x00);       // �ر�HUB�Ĵ�������
         if(imu963ra_acc_gyro_self_check())
         {
-            printf("%s", "IMU963RA acc and gyro self check error.");
+            printf("%s\n", "IMU963RA acc and gyro self check error.");
             return_state = 1;
             break;
         }
@@ -493,7 +493,7 @@ uint8_t imu963ra_init (void)
         {
             default:
             {
-                printf("%s", "IMU963RA_ACC_SAMPLE_DEFAULT set error.");
+                printf("%s", "IMU963RA_ACC_SAMPLE_DEFAULT set error.\n");
                 return_state = 1;
             }break;
             case IMU963RA_ACC_SAMPLE_SGN_2G:
@@ -533,7 +533,7 @@ uint8_t imu963ra_init (void)
         {
             default:
             {
-                printf("%s", "IMU963RA_GYRO_SAMPLE_DEFAULT set error.");
+                printf("%s", "IMU963RA_GYRO_SAMPLE_DEFAULT set error.\n");
                 return_state = 1;
             }break;
             case IMU963RA_GYRO_SAMPLE_SGN_125DPS:

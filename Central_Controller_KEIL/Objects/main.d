@@ -38,3 +38,6 @@
 .\objects\main.o: .\Hardware\servo.h
 .\objects\main.o: .\System\Delay.h
 .\objects\main.o: .\Hardware\balance_pid.h
+.\objects\main.o: .\Hardware\jump.h
+.\objects\main.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
+.\objects\main.o: .\System\Global_State.h

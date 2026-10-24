@@ -214,7 +214,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
                           float mx, float my, float mz,
                           float *roll, float *pitch, float *yaw, float dt)
 {
-    const float Kp = 0.5f, Ki = 0.01f;
+    const float Kp = 4.0f, Ki = 0.01f;
     float norm, ex = 0.0f, ey = 0.0f, ez = 0.0f;
     float ix, iy, iz, n0, n1, n2, n3, sin_pitch;
     float q0q1 = q0*q1, q0q2 = q0*q2, q0q3 = q0*q3;
@@ -241,7 +241,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     if (!isfinite(norm)) return 0;
     /* 磁力计首帧未就绪时可以为零，跳过本次磁场校正。 */
     if (norm > 0.000001f) {
-        Mag_Apply_Calibration(&mx, &my, &mz);
+        //Mag_Apply_Calibration(&mx, &my, &mz);
         norm = sqrtf(mx*mx + my*my + mz*mz);
         if (!isfinite(norm)) return 0;
     }
