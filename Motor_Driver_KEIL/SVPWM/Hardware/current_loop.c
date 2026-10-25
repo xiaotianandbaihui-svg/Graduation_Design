@@ -4,14 +4,14 @@
 #define DEG_TO_RAD 0.017453292519943295f
 #define INV_SQRT3  0.577350269189625765f
 
-static float Clamp(float value, float limit)
+static float Clamp(float value, float limit)/*取得-limit≤value≤limit*/
 {
     return value > limit ? limit : (value < -limit ? -limit : value);
 }
 
 static void LimitVector(float *x, float *y, float limit)
 {
-    float magnitude = hypotf(*x, *y);
+    float magnitude = hypotf(*x, *y);/*返回√(x²+y²)*/
     if (magnitude > limit) {
         float scale = limit / magnitude;
         *x *= scale;
@@ -56,7 +56,7 @@ int CurrentLoop_Start(CurrentLoop *loop)
 
 void CurrentLoop_Stop(CurrentLoop *loop)
 {
-    loop->running = 0;
+    loop->running = 0;/*电流环停止*/
     ClearState(loop);
     CurrentLoop_DisablePWM(loop->motor_id);
 }
@@ -85,8 +85,10 @@ int CurrentLoop_Update(CurrentLoop *loop, float target_id_a, float target_iq_a)
     /* Park变换：d轴对准转子磁链，q轴正向超前d轴90度。 */
     loop->id_a = alpha * cosine + beta * sine;
     loop->iq_a = -alpha * sine + beta * cosine;
-    ed = target_id_a - loop->id_a;
-    eq = target_iq_a - loop->iq_a;
+    /* 电流以星点向外为正，电压仍以相端对星点为正。
+     * 正电压使向外电流减小，因此PI取实测-目标，保持负反馈。 */
+    ed = loop->id_a - target_id_a;/*输出目标电流的差值*/
+    eq = loop->iq_a - target_iq_a;/*输出目标电流差值*/
 
     voltage_limit = feedback.bus_voltage_v * INV_SQRT3 * c->voltage_ratio;
     next_d = Clamp(loop->integral_d + c->ki_d * c->period_s * ed, voltage_limit);

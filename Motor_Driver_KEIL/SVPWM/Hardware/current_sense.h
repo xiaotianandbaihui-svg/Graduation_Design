@@ -14,7 +14,7 @@ typedef struct {
 } CurrentSense_Raw;
 
 typedef struct {
-    float ia_a, ib_a, ic_a;   /* 单位A；正方向为逆变器流向电机 */
+    float ia_a, ib_a, ic_a;   /* 单位A；正方向为星点经绕组流向逆变器 */
 } CurrentSense_Phase;
 
 /* 由SVPWM_Init/SixStep_Init自动调用，不必在main重复初始化。
@@ -37,7 +37,8 @@ int CurrentSense_ReadRaw(CurrentSense_Raw *raw);
  * 1成功；0表示未初始化/参数错误/放大器输出超出保守线性区，不改输出。
  * 返回1仅表示换算成功，不代表采样窗口有效；由调用方保障低侧采样条件。
  * DRV8323H: VSO=VREF/2-GAIN*(VSP-VSN)。当前SP接分流器上端，
- * 流向电机的相电流与流向地的分流器电流反向，所以ia=(ADC-zero)*比例。
+ * 正相电流从星点经绕组流向逆变器，在有效低侧采样窗口与分流器流向地同向，
+ * 所以ia=(zero-ADC)*比例。三相均采用此方向，ic=-ia-ib。
  * 它不是车体前进方向，不随左右轮安装方向翻转。
  * 本模块不测母线电压，也不提供12A过流关断。 */
 int CurrentSense_Convert(uint8_t id, const CurrentSense_Raw *raw,

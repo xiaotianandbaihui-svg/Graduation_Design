@@ -13,11 +13,11 @@ typedef struct {
     float kp_q, ki_q;
     float period_s;            /* 固定调用周期，单位秒，须与实际采样周期一致 */
     float current_limit_a;     /* 目标sqrt(Id^2+Iq^2)上限，A；不是硬件过流保护 */
-    float voltage_ratio;       /* (0,1]，电压矢量上限=此比例*Vbus/sqrt(3) */
+    float voltage_ratio;       /* (0,1]，电压矢量上限=此比例*Vbus/sqrt(3) ，这里的根号3看图片*/
 } CurrentLoop_Config;
 
 typedef struct {
-    float ia_a, ib_a;          /* 同一采样时刻的A/B相电流，A；正方向逆变器->电机 */
+    float ia_a, ib_a;          /* 同一采样时刻的A/B相电流，A；正方向星点->绕组->逆变器 */
     float electrical_deg;      /* 同时刻转子d轴电角度，度；0沿A相，正向A->B->C */
     float bus_voltage_v;       /* 实际直流母线电压，V */
 } CurrentLoop_Feedback;
@@ -27,7 +27,7 @@ typedef struct {
     uint8_t motor_id;
     uint8_t running;
     float integral_d, integral_q; /* 已乘Ki的积分项，V */
-    float id_a, iq_a;             /* 实测d/q电流，A，便于调试 */
+    float id_a, iq_a;             /* 实测d/q电流，A，由向外为正的相电流变换得到 */
     float ud_v, uq_v;             /* 限幅后的d/q电压，V */
 } CurrentLoop;
 
@@ -40,7 +40,8 @@ void CurrentLoop_Stop(CurrentLoop *loop); /* 清积分，并调用底层关闭PW
 
 /* 每取得一组新的有效采样调用一次；不能直接沿用20~50ms的CAN周期。
  * target_id_a通常设0；target_iq_a是带符号的转矩电流指令，单位A。
- * 正Iq对应ABC坐标内的正转矩，车体前进方向仍须按左右轮安装关系换算。
+ * 目标与反馈电流均以星点向外为正；同一电角度下，Iq符号与流入电机约定相反。
+ * 转矩指令须按此约定换算，车体前进方向仍须按左右轮安装关系换算。
  * 目标电流做圆形限幅；两个PI输出合成后再按母线电压做圆形限幅。
  * 返回1=成功下发；0=未启动或失败。采样/计算/输出失败会Stop，须显式Start恢复。
  * 没有位置/速度外环、弱磁或交叉耦合前馈，属于基础d/q PI电流控制。
@@ -61,6 +62,7 @@ int CurrentLoop_ReadFeedback(uint8_t motor_id, CurrentLoop_Feedback *feedback);
 
 /* 1=本周期电压矢量接受成功，0=失败。
  * 输入为静止alpha/beta坐标系电压(V)，交给逆Clarke/SVPWM更新三相占空比。
+ * 电压仍以电机相端对星点为正，不随电流符号定义改变；输出适配层不再取反。
  * alpha轴沿A相，beta轴沿ABC正方向旋转90度。
  * 零电压矢量仍是运行中的控制指令，应输出三相相等的占空比；不等于高阻停机。
  * 可用角度atan2(beta,alpha)、幅值sqrt(alpha^2+beta^2)适配电压型SVPWM；
