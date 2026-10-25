@@ -4,145 +4,103 @@
 #define DEG_TO_RAD 0.017453292519943295f
 #define INV_SQRT3  0.577350269189625765f
 
-static float Clamp(float value, float limit)/*取得-limit≤value≤limit*/
+static float Clamp(float value, float limit) /* 取得-limit≤value≤limit */
 {
     return value > limit ? limit : (value < -limit ? -limit : value);
 }
 
-static void LimitVector(float *x, float *y, float limit)
+static int PI_Init(CurrentLoop_PI *pi, float kp, float ki, float period_s)
 {
-    float magnitude = hypotf(*x, *y);/*返回√(x²+y²)*/
-    if (magnitude > limit) {
-        float scale = limit / magnitude;
-        *x *= scale;
-        *y *= scale;
-    }
+    if (!isfinite(kp) || kp < 0.0f || !isfinite(ki) || ki < 0.0f) return 0;
+    pi->kp = kp;
+    pi->ki_step = ki * period_s;
+    return isfinite(pi->ki_step);
 }
 
-static void ClearState(CurrentLoop *loop)
+/* 先试算本拍积分；合成电压限幅后，再决定是否保留。 */
+static float PI_Output(CurrentLoop_PI *pi, float error, float limit)
 {
-    loop->integral_d = loop->integral_q = 0.0f;
+    float next = pi->integral + pi->ki_step * error;
+    if (!isfinite(next)) return NAN;
+    pi->integral = Clamp(next, limit);
+    return pi->kp * error + pi->integral;
+}
+
+static void PI_AntiWindup(CurrentLoop_PI *pi, float previous, float raw, float limited)
+{
+    /* 本拍积分若继续推动输出饱和，就退回上拍积分；反向释放仍允许。 */
+    if ((raw - limited) * (pi->integral - previous) > 0.0f)
+        pi->integral = previous;
+}
+
+void CurrentLoop_Reset(CurrentLoop *loop)
+{
+    loop->d.integral = loop->q.integral = 0.0f;
     loop->id_a = loop->iq_a = 0.0f;
     loop->ud_v = loop->uq_v = 0.0f;
 }
 
-void CurrentLoop_Init(CurrentLoop *loop, uint8_t motor_id,
-                      const CurrentLoop_Config *config)
+int CurrentLoop_Init(CurrentLoop *loop, const CurrentLoop_Config *config)
 {
-    loop->config = *config;
-    loop->motor_id = motor_id;
-    loop->running = 0;
-    ClearState(loop);
-}
-
-int CurrentLoop_Start(CurrentLoop *loop)
-{
-    const CurrentLoop_Config *c = &loop->config;
-    /* 静态参数只在启动时检查，不在每次电流环中重复扫描。 */
-    if (!isfinite(c->kp_d) || c->kp_d < 0.0f ||
-        !isfinite(c->ki_d) || c->ki_d < 0.0f ||
-        !isfinite(c->kp_q) || c->kp_q < 0.0f ||
-        !isfinite(c->ki_q) || c->ki_q < 0.0f ||
-        !isfinite(c->period_s) || c->period_s <= 0.0f ||
-        !isfinite(c->current_limit_a) || c->current_limit_a <= 0.0f ||
-        !(c->voltage_ratio > 0.0f && c->voltage_ratio <= 1.0f)) {
-        CurrentLoop_Stop(loop);
-        return 0;
-    }
-    ClearState(loop);
-    loop->running = 1;
+    CurrentLoop_Reset(loop);
+    if (!isfinite(config->period_s) || config->period_s <= 0.0f ||
+        !isfinite(config->current_limit_a) || config->current_limit_a <= 0.0f ||
+        !(config->voltage_ratio > 0.0f && config->voltage_ratio <= 1.0f) ||
+        !PI_Init(&loop->d, config->kp_d, config->ki_d, config->period_s) ||
+        !PI_Init(&loop->q, config->kp_q, config->ki_q, config->period_s)) return 0;
+    loop->current_limit_a = config->current_limit_a;
+    loop->voltage_ratio = config->voltage_ratio;
     return 1;
 }
 
-void CurrentLoop_Stop(CurrentLoop *loop)
+int CurrentLoop_Update(CurrentLoop *loop, const CurrentLoop_Feedback *feedback,
+                       float target_iq_a, CurrentLoop_Voltage *voltage)
 {
-    loop->running = 0;/*电流环停止*/
-    ClearState(loop);
-    CurrentLoop_DisablePWM(loop->motor_id);
-}
+    float sine, cosine, alpha, beta, ed, eq, limit, magnitude, scale;
+    float previous_d, previous_q, raw_d, raw_q, ud, uq;
+    if (!isfinite(feedback->ia_a) || !isfinite(feedback->ib_a) ||
+        !isfinite(feedback->electrical_deg) || !isfinite(feedback->bus_voltage_v) ||
+        feedback->bus_voltage_v <= 0.0f || !isfinite(target_iq_a)) goto failed;
 
-int CurrentLoop_Update(CurrentLoop *loop, float target_id_a, float target_iq_a)
-{
-    const CurrentLoop_Config *c = &loop->config;
-    CurrentLoop_Feedback feedback;
-    float sine, cosine, alpha, beta, ed, eq, voltage_limit;
-    float next_d, next_q, raw_d, raw_q, ud, uq;
+    target_iq_a = Clamp(target_iq_a, loop->current_limit_a);
+    sine = sinf(feedback->electrical_deg * DEG_TO_RAD);
+    cosine = cosf(feedback->electrical_deg * DEG_TO_RAD);
 
-    if (!loop->running) return 0;
-    if (!CurrentLoop_ReadFeedback(loop->motor_id, &feedback) ||
-        !isfinite(feedback.ia_a) || !isfinite(feedback.ib_a) ||
-        !isfinite(feedback.electrical_deg) ||
-        !isfinite(feedback.bus_voltage_v) || feedback.bus_voltage_v <= 0.0f ||
-        !isfinite(target_id_a) || !isfinite(target_iq_a)) goto failed;
-
-    LimitVector(&target_id_a, &target_iq_a, c->current_limit_a);
-    sine = sinf(feedback.electrical_deg * DEG_TO_RAD);
-    cosine = cosf(feedback.electrical_deg * DEG_TO_RAD);
-
-    /* Clarke变换，幅值不变型；假设三线电机ia+ib+ic=0。 */
-    alpha = feedback.ia_a;
-    beta = (feedback.ia_a + 2.0f * feedback.ib_a) * INV_SQRT3;
-    /* Park变换：d轴对准转子磁链，q轴正向超前d轴90度。 */
+    /* Clarke + Park：把相电流换算到随转子旋转的d/q轴。 */
+    alpha = feedback->ia_a;
+    beta = (feedback->ia_a + 2.0f * feedback->ib_a) * INV_SQRT3;
     loop->id_a = alpha * cosine + beta * sine;
     loop->iq_a = -alpha * sine + beta * cosine;
-    /* 电流以星点向外为正，电压仍以相端对星点为正。
-     * 正电压使向外电流减小，因此PI取实测-目标，保持负反馈。 */
-    ed = loop->id_a - target_id_a;/*输出目标电流的差值*/
-    eq = loop->iq_a - target_iq_a;/*输出目标电流差值*/
+    /* 电流星点向外为正、电压相端对星点为正，因此误差取实测-目标。 */
+    ed = loop->id_a; /* Id目标为0，但Ud不能固定为0 */
+    eq = loop->iq_a - target_iq_a;
 
-    voltage_limit = feedback.bus_voltage_v * INV_SQRT3 * c->voltage_ratio;
-    next_d = Clamp(loop->integral_d + c->ki_d * c->period_s * ed, voltage_limit);
-    next_q = Clamp(loop->integral_q + c->ki_q * c->period_s * eq, voltage_limit);
-    raw_d = c->kp_d * ed + next_d;
-    raw_q = c->kp_q * eq + next_q;
-    if (!isfinite(raw_d) || !isfinite(raw_q)) goto failed;
+    /* 电压矢量幅值不超过母线电压的1/sqrt(3)，并保留配置的余量。 */
+    limit = feedback->bus_voltage_v * INV_SQRT3 * loop->voltage_ratio;
+    previous_d = loop->d.integral;
+    previous_q = loop->q.integral;
+    raw_d = PI_Output(&loop->d, ed, limit);
+    raw_q = PI_Output(&loop->q, eq, limit);
+    magnitude = hypotf(raw_d, raw_q);
+    if (!isfinite(magnitude)) goto failed;
 
-    ud = raw_d;
-    uq = raw_q;
-    LimitVector(&ud, &uq, voltage_limit); /* 限合成矢量，避免两轴分别限幅后超调制 */
+    /* 限制合成矢量，不能只把Ud、Uq各自限幅。 */
+    ud = raw_d; uq = raw_q;
+    if (magnitude > limit) {
+        scale = limit / magnitude;
+        ud *= scale; uq *= scale;
+    }
+    PI_AntiWindup(&loop->d, previous_d, raw_d, ud);
+    PI_AntiWindup(&loop->q, previous_q, raw_q, uq);
 
-    /* 逆Park变换，输出静止坐标系的电压矢量。 */
-    alpha = ud * cosine - uq * sine;
-    beta = ud * sine + uq * cosine;
-    if (!CurrentLoop_WriteVoltage(loop->motor_id, alpha, beta)) goto failed;
-
-    /* 条件积分：拒绝继续推向饱和的积分变化，允许反向释放。
-     * 本拍电压使用候选PI结果，是否保留积分影响下一拍。 */
-    if ((raw_d - ud) * (next_d - loop->integral_d) <= 0.0f)
-        loop->integral_d = next_d;
-    if ((raw_q - uq) * (next_q - loop->integral_q) <= 0.0f)
-        loop->integral_q = next_q;
-    loop->ud_v = ud;
-    loop->uq_v = uq;
+    /* 逆Park：把d/q电压换回静止坐标系，交给SVPWM。 */
+    voltage->alpha_v = ud * cosine - uq * sine;
+    voltage->beta_v = ud * sine + uq * cosine;
+    loop->ud_v = ud; loop->uq_v = uq;
     return 1;
 
 failed:
-    CurrentLoop_Stop(loop);
+    CurrentLoop_Reset(loop);
+    voltage->alpha_v = voltage->beta_v = 0.0f;
     return 0;
 }
-
-#ifndef CURRENT_LOOP_EXTERNAL_IO
-/* 尚未接通完整的同步反馈/电压输出链路，以下空接口仍返回失败。 */
-int CurrentLoop_ReadFeedback(uint8_t motor_id, CurrentLoop_Feedback *feedback)
-{
-    (void)motor_id;
-    (void)feedback;
-    /* TODO：取得本周期真实的ia/ib、电角度和母线电压，填写feedback，成功返回1。 */
-    return 0;
-}
-
-int CurrentLoop_WriteVoltage(uint8_t motor_id, float alpha_v, float beta_v)
-{
-    (void)motor_id;
-    (void)alpha_v;
-    (void)beta_v;
-    /* TODO：将alpha/beta电压矢量转为三相PWM，成功返回1。 */
-    return 0;
-}
-
-void CurrentLoop_DisablePWM(uint8_t motor_id)
-{
-    (void)motor_id;
-    /* TODO：关闭指定电机的驱动输出。 */
-}
-#endif

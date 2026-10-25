@@ -22,16 +22,21 @@ typedef struct {
  * 两轮静止且分流电阻中无电流。重新调用也必须满足这些条件。
  * 独占ADC1/ADC2，配置PA5/PA6/PA7/PB0为模拟输入；ADC时钟PCLK2/6。
  * 完成ADC自校准、DRV的CAL脉冲和四路零偏平均；1成功、0失败。
- * 所有接口只能由同一执行上下文串行调用，不注册中断、不自动启动电流环。 */
+ * 初始化在主循环停机时进行；电流环运行后由TIM1中断独占采样接口。 */
 int CurrentSense_Init(void);
 
 /* 软件触发一次双ADC注入序列并等待完成，1成功、0失败（不改输出）。
  * ADC1: IN5->IN7，ADC2: IN6->IN8；同一电机A/B同步，两电机依次采样。
  * 这是调试/底层采样入口，并未与TIM2/TIM4同步！低侧电阻只有在对应
  * 低管导通且信号稳定时才代表相电流，随意调用后不能直接用作FOC反馈。
- * 正式电流环还需安排两电机各自的PWM采样窗口，并校验窗口是否足够。
+ * 正式电流环使用下面的ReadSynchronized，不能混用软件采样。
  * 超时使采样模块失效，须在停机状态重新Init，不能把上一次结果当新数据。 */
 int CurrentSense_ReadRaw(CurrentSense_Raw *raw);
+
+/* 等待下一次TIM2_TRGO硬件触发并读取新样本；两轮A/B各同步，双轮依次。
+ * 前提：SVPWM_StartCurrent已建立同步及有效窗口，DWT周期计数已开启。
+ * 只由电流环调用；最长等待200us，失败后停机，不复用旧样本。 */
+int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw);
 
 /* 用已校准零偏换算指定电机的A/B相，并按ic=-ia-ib重构C相。
  * 1成功；0表示未初始化/参数错误/放大器输出超出保守线性区，不改输出。

@@ -33,7 +33,8 @@ int8_t SVPWM_GetEncoderSign(uint8_t id);
  * 独占TIM2/TIM4，关闭JTAG、保留SWD；不配置系统时钟或中断。
  * SPI2、CS GPIO沿用你已有的初始化，参见tle5012b.h。
  * 使用已有Delay_us/Delay_ms，延时不能占用TIM2/TIM4。
- * 不与six_step.c同时运行；所有接口由同一执行上下文串行调用。
+ * 不与six_step.c同时运行。电流环运行时由TIM1中断独占PWM与编码器；
+ * 主循环不能再调用SVPWM_Set/Update或直接读编码器。
  */
 
 /* 唯一电机初始化入口，返回1全部成功、0失败并关闭双路。
@@ -44,7 +45,7 @@ int8_t SVPWM_GetEncoderSign(uint8_t id);
  * 零点始终保留0度矢量下的角度，不能用90度位置覆盖。
  * 通常约2.4秒，等待延时最多约6秒，另加通信/计算时间；不写Flash。
  * 失败后先排除原因，再显式调用本函数重试，不要循环自动重试。
- * 成功后持续调用SVPWM_Update()。 */
+ * 正式电流驱动随后调用MotorCurrent_Init；SVPWM_Update仅用于原电压调试。 */
  
 int Motor_init(void);  /*直接调用这个函数即可，返回值：1  成了 0： 寄了*/
 
@@ -71,5 +72,12 @@ void SVPWM_Stop(uint8_t id); /* 指定一路INL全低，高阻，保留有效标
  * 不包含速度环、电流环或加速度限制。 */
 int SVPWM_Update(int8_t dir1, int8_t dir2,
                  uint16_t modulation_1, uint16_t modulation_2);
+
+/* 电流环专用：停止状态建立同步PWM和低侧ADC窗口，输出可用电压比例。
+ * guard_us需覆盖驱动死区、放大器及外部RC的稳定时间，由实测决定。
+ * 内部占用TIM2_CH1，但不占PA0引脚；零电压保持低侧导通。 */
+int SVPWM_StartCurrent(uint32_t guard_us, float *voltage_ratio);
+int SVPWM_ReadRotor(uint8_t id, float *mechanical_deg, float *electrical_deg);
+int SVPWM_WriteVoltage(uint8_t id, float alpha_v, float beta_v, float bus_v);
 
 #endif

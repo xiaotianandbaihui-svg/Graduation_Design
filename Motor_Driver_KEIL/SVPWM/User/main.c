@@ -3,6 +3,7 @@
 #include "OLED.h"
 #include "Serial.h"
 #include "svpwm.h"
+#include "motor_current.h"
 #include "tle5012b.h"
 #include "balance_pid.h"
 #include <stdlib.h>
@@ -65,7 +66,7 @@ static void IMU_TimerInit(void)
     TIM_ClearITPendingBit(TIM3, TIM_IT_Update); /* 清除初始化UG产生的UIF */
     /* Serial_Init已设置分组2，TIM3优先于USART1接收中断。 */
     nvic.NVIC_IRQChannel = TIM3_IRQn;
-    nvic.NVIC_IRQChannelPreemptionPriority = 0;
+    nvic.NVIC_IRQChannelPreemptionPriority = 1; /* TIM1电流环优先 */
     nvic.NVIC_IRQChannelSubPriority = 0;
     nvic.NVIC_IRQChannelCmd = ENABLE;
     NVIC_Init(&nvic);
@@ -86,7 +87,7 @@ typedef enum { DRIVE_FEEDBACK, DRIVE_TARGET, DRIVE_PAUSED } DriveStage;
 
 static void Drive_Fault(const char *message)
 {
-    SVPWM_Stop(0); SVPWM_Stop(1);
+    MotorCurrent_Stop();
     Balance_Stop(&for_balance_pitch); Balance_Stop(&for_balance_yaw);
     while (1) { printf("%s\n", message); Delay_ms(500); }
 }
@@ -101,6 +102,7 @@ int main(void)
 	if (!Motor_init()) {
 		while (1) { printf("Motor init failed\n"); Delay_ms(500); }
 	}
+	if (!MotorCurrent_Init()) Drive_Fault("Current init failed");
 	if (!CAN_Init_Together()) Drive_Fault("CAN init failed");
 	/*初始化pitch的PID控制器*/
 	Balance_Init(0,&for_balance_pitch);
@@ -110,6 +112,7 @@ int main(void)
 	Balance_Init(1,&for_balance_yaw);
 	Balance_Start(&for_balance_yaw);//开启PID，放心，这里只是把积分项啊这些东西全部清零了
 	IMU_TimerInit();/*初始化定时器3，用于检测CAN超时*/
+	TIM_Cmd(TIM3, ENABLE);
 	
 	/*此处进行PID调参*/
 	/*这里特别注意一下调参时候的极性，轮子转动的正方向是电角度正方向！车到时候行驶的正方向是不一定电角度正方向*/
@@ -140,8 +143,8 @@ int main(void)
 	/*------------------------------------------------------------------------------------------------*/
 
 	
-	int16_t pid_output_for_pitch[2]={0};//这里是picth角经过PID后得到的输出值，这个值会给SVPWM_Update函数来调用
-	int16_t pid_output_for_yaw[2]={0};//这里是picth角经过PID后得到的输出值，这个值会给SVPWM_Update函数来调用
+	int16_t pid_output_for_pitch[2]={0};//Pitch输出±1000，现在映射为目标Iq比例
+	int16_t pid_output_for_yaw[2]={0};//Yaw输出叠加后交给电流环
 	int16_t pid_output[2]={0};//上述两个值对应相加得到最终输出
 	
 	float angle_speed_1=0;
@@ -153,12 +156,16 @@ int main(void)
 	{	
 		/*状态锁死*/
         uint8_t mode;
+        if (MotorCurrent_GetStatus() < 0) {
+            printf("Current fault: %d\n", (int)MotorCurrent_GetStatus());
+            Drive_Fault("Current loop stopped");
+        }
         NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
         mode = CAN_DriveCommand;
         CAN_DriveCommand = CAN_DRIVE_NONE;
         NVIC_EnableIRQ(USB_LP_CAN1_RX0_IRQn);
         if (mode != CAN_DRIVE_NONE) {
-            SVPWM_Stop(0); SVPWM_Stop(1);
+            MotorCurrent_Stop();
             Balance_Stop(&for_balance_pitch); Balance_Stop(&for_balance_yaw);
             pid_output[0] = pid_output[1] = 0;
             if_We_Should_Infrom_Main_Function_to_PID = 0;
@@ -182,15 +189,21 @@ int main(void)
 		/*跳跃停机*/
 		if(go==1)
 		{
-			/*这里是主循环，主要是读取角度和轮子速度，然后进行PID计算，最后输出给SVPWM_Update函数*/
+			if (MotorCurrent_GetStatus() == MOTOR_CURRENT_STOPPED) {
+                CAN_Time_Out_Counter = 0;
+                if (!MotorCurrent_Start()) {
+                    printf("Current start fault: %d\n", (int)MotorCurrent_GetStatus());
+                    Drive_Fault("Current start failed");
+                }
+            }
+            /* 主循环只算外环并发布Iq目标；TIM1独立完成电流采样和PWM更新。 */
 			if(if_We_Should_Infrom_Main_Function_to_PID==0x01&&stage==DRIVE_FEEDBACK)
 			{
 				stage=DRIVE_TARGET;
-				if(Balance_ReadFeedback(&angle_speed_1,&angle_speed_2)==0)/*读取轮子速度，单位：rpm*/
+				if(MotorCurrent_ReadSpeed(&angle_speed_1,&angle_speed_2)==0)/*读取轮子速度，单位：rpm*/
 				{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
-						SVPWM_Stop(0);
-						SVPWM_Stop(1);
+						MotorCurrent_Stop();
 						while (1) { /*此处卡死*/} 
 
 				}
@@ -201,8 +214,7 @@ int main(void)
 					if(Can_Send_Speed_Timeout>1000000)
 					{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
-						SVPWM_Stop(0);
-						SVPWM_Stop(1);
+						MotorCurrent_Stop();
 						while (1) { printf("Can_Send_The_Wheels_Speed Timeout!\n"); /*此处卡死*/ Delay_ms(500);}	 
 					}
 				};//要把角速度发送出去，让主控板尽快进入控制阶段
@@ -236,8 +248,7 @@ int main(void)
 				if(Balance_Update(&for_balance_pitch,the_angles[0],angle_speed_1,angle_speed_2,pid_output_for_pitch,0)==0)
 				{
 							/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
-						SVPWM_Stop(0);
-						SVPWM_Stop(1);
+						MotorCurrent_Stop();
 						while (1) { /*此处卡死*/} 
 				}
 
@@ -245,8 +256,7 @@ int main(void)
 				if(Balance_Update(&for_balance_yaw,the_angles[1],angle_speed_1,angle_speed_2,pid_output_for_yaw,1)==0)
 				{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
-						SVPWM_Stop(0);
-						SVPWM_Stop(1);
+						MotorCurrent_Stop();
 						while (1) { /*此处卡死*/} 
 				}
 				pid_output[0]=pid_output_for_pitch[0]+pid_output_for_yaw[0];
@@ -261,22 +271,18 @@ int main(void)
 					pid_output[1]=Output_limit;
 				else if(pid_output[1]<-Output_limit)
 					pid_output[1]=-Output_limit;
+
+                /* 安装方向只换算一次；适配层再按星点向外约定换算Iq。 */
+                if (!MotorCurrent_SetCommand(
+                        (int16_t)(pid_output[0] * car_forward_electircal_forward_1),
+                        (int16_t)(pid_output[1] * car_forward_electircal_forward_2)))
+                    Drive_Fault("Current command failed");
 				
 			}
-			/*这里不需要加延时，这不是陀螺仪，其实按照编码器的最大速度读就好，这里可能读到旧的，但是无妨*/
-			/*粗心大意得你，别忘了，这里有开关！！*/
-            dir1 = pid_output[0] >= 0 ? 1 : -1;
-            dir2 = pid_output[1] >= 0 ? 1 : -1;
-			SVPWM_Update(dir1*car_forward_electircal_forward_1,dir2*car_forward_electircal_forward_2,abs(pid_output[0]),abs(pid_output[1]));/*这里可能因为读取过快读到旧的角度，但是咱们的主频
-			才72Mhz，况且中间还有SPI的读写周期，基本读不了几下旧数据，就算读到了也不过是保持输出磁矢量不变*/
-
-
-
 			if(CAN_Time_Out_Counter>CAN_Time_Out_Threshold)/*目前是3包数据的时间收不到，就认为死机了*/
 			{
 				/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/
-				SVPWM_Stop(0);
-				SVPWM_Stop(1);
+				MotorCurrent_Stop();
 				while (1) { 				
 				printf("CAN Timeout!\n");/*此处卡死*/
 				} 
@@ -284,8 +290,7 @@ int main(void)
 		}
 		else
 		{
-			SVPWM_Stop(0);
-			SVPWM_Stop(1);
+			MotorCurrent_Stop();
 		}
 	}
 }

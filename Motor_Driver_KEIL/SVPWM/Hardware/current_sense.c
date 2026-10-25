@@ -1,5 +1,6 @@
 #include "current_sense.h"
 #include "stm32f10x.h"
+#include "cycle_counter.h"
 #include "stm32f10x_adc.h"
 #include "stm32f10x_gpio.h"
 #include "stm32f10x_rcc.h"
@@ -17,9 +18,9 @@ static float zero_a[2], zero_b[2];/*电机零点的原始数值采取*/
 static int DriverActive(void)/*这边主要就是确认那两个DRV8323是否正常工作的*/
 {
     return GPIO_ReadOutputDataBit(GPIOA, GPIO_Pin_0) == Bit_SET &&/*已经使能，对应EN*/
-           GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_4) == Bit_RESET &&/*这个引脚是CAL，用于DRV8323的校准，低电平表示校准完了*/
-           GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_8) == Bit_SET &&/*nFAULT*/
-           GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5) == Bit_SET;/*nFAULT*/
+           GPIO_ReadOutputDataBit(GPIOB, GPIO_Pin_4) == Bit_RESET &&/*这个引脚是CAL，用于DRV8323的校准，低电平表示当前未请求校准*/
+           GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_8) == Bit_SET &&/*对应DRV8323芯片的nFAULT*/
+           GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5) == Bit_SET;/*对应DRV8323芯片的nFAULT*/
 }
 
 static int Fail(void)
@@ -50,6 +51,7 @@ int CurrentSense_ReadRaw(CurrentSense_Raw *raw)
     if (!ready || raw == 0 || !DriverActive()) return 0;
     ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
     ADC_ClearFlag(ADC2, ADC_FLAG_JEOC);
+    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
     ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE); /* ADC1触发双ADC */
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == RESET ||
            ADC_GetFlagStatus(ADC2, ADC_FLAG_JEOC) == RESET)
@@ -63,6 +65,41 @@ int CurrentSense_ReadRaw(CurrentSense_Raw *raw)
     return 1;
 }
 
+/* TIM2的OC1REF上升沿触发；两轮PWM已同步，并由SVPWM限制占空比保证窗口。
+ * 只接收本次使能外触发之后的新序列。DWT由motor_current初始化。 */
+int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
+{
+    uint32_t began = CycleCounter_Now();
+    CurrentSense_Raw sample;
+    if (!ready || raw == 0 || !DriverActive()) return 0;
+    ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
+    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_T2_TRGO);
+    ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
+    ADC_ClearFlag(ADC2, ADC_FLAG_JEOC);
+    /* 先等OC1REF明确为低，再打开触发；下一次真正的上升沿才开始采样。
+     * 留半个CCR1的距离，避免在OC1REF已经为高时使能外部触发。 */
+    while (TIM2->CNT >= TIM2->CCR1 / 2u)
+        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u)
+            return Fail();
+    ADC_ExternalTrigInjectedConvCmd(ADC1, ENABLE);
+    while (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == RESET ||
+           ADC_GetFlagStatus(ADC2, ADC_FLAG_JEOC) == RESET) {
+        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u) {
+            ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE); /* 最多等待200us */
+            return Fail();
+        }
+    }
+    ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
+    sample.a[0] = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
+    sample.b[0] = ADC_GetInjectedConversionValue(ADC2, ADC_InjectedChannel_1);
+    sample.a[1] = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
+    sample.b[1] = ADC_GetInjectedConversionValue(ADC2, ADC_InjectedChannel_2);
+    if (!DriverActive()) return 0;
+    *raw = sample;
+    return 1;
+}
+
+/*下面这个函数会上电就采样ZERO_SAMPLES次，获得零点偏移量(这个零偏是直接从ADC读出来的原始数据哦)*/
 int CurrentSense_Init(void)
 {
     GPIO_InitTypeDef gpio;
@@ -99,7 +136,7 @@ int CurrentSense_Init(void)
     adc.ADC_NbrOfChannel = 1u; /* 不启动规则组；下面单独设置注入组长度 */
     adc.ADC_Mode = ADC_Mode_Independent;
     ADC_Init(ADC2, &adc);
-    adc.ADC_Mode = ADC_Mode_InjecSimult;
+    adc.ADC_Mode = ADC_Mode_InjecSimult;/**/
     ADC_Init(ADC1, &adc);
     ADC_InjectedSequencerLengthConfig(ADC1, 2u);
     ADC_InjectedSequencerLengthConfig(ADC2, 2u);
@@ -109,7 +146,8 @@ int CurrentSense_Init(void)
     ADC_InjectedChannelConfig(ADC2, ADC_Channel_8, 2u, ADC_SampleTime_28Cycles5);
     ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
     ADC_ExternalTrigInjectedConvConfig(ADC2, ADC_ExternalTrigInjecConv_None);
-    ADC_ExternalTrigInjectedConvCmd(ADC2, ENABLE);
+    ADC_ExternalTrigInjectedConvCmd(ADC2, ENABLE);/*这里不调用ADC1，把外部触发使能是因为：后面触发转化调用函数ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE)的时候
+    这个函数自带使能外部触发的效果，一次性设置触发使能+触发转化 */
     ADC_Cmd(ADC1, ENABLE);
     ADC_Cmd(ADC2, ENABLE);
     Delay_us(10u); /* 上电稳定后才能启动ADC校准 ，等待上电稳定*/
@@ -123,7 +161,8 @@ int CurrentSense_Init(void)
     Delay_us(20u);
     ready = 1u;/*准备就绪完成*/
 
-    /*开始采样，得到零偏电压值（DRV是正负）*/
+
+    /*开始采样，得到零偏电压值（DRV是正负电流都有的，这个基准值还是很重要的）*/
     for (i = 0u; i < ZERO_SAMPLES; ++i) {
         if (!CurrentSense_ReadRaw(&raw)) return Fail();
         for (id = 0u; id < 2u; ++id) {
@@ -143,7 +182,7 @@ int CurrentSense_Init(void)
     return 1;
 }
 
-/*电压转化*/
+/*把电压转化为电流*/
 int CurrentSense_Convert(uint8_t id, const CurrentSense_Raw *raw,
                          CurrentSense_Phase *current)
 {

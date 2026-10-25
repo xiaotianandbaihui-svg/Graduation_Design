@@ -1,76 +1,49 @@
 #ifndef CURRENT_LOOP_H
 #define CURRENT_LOOP_H
 
-#include <stdint.h>
-
-/* 有位置传感器的FOC电流环：Clarke -> Park -> d/q双PI -> 逆Park。
- * 每台电机一个CurrentLoop对象；无ADC、GPIO、定时器或现有主循环依赖。
- * 新版板5已有current_sense采样接口；本文件仍只提供逻辑，空接口默认失败。
- * 尚未接入PWM同步采样、母线电压反馈和电压输出适配，不自动启用电流闭环。
- */
+/* 基础FOC：Id目标固定0，只接收Iq目标；硬件启停由motor_current负责。 */
 typedef struct {
-    float kp_d, ki_d;          /* Kp: V/A；Ki: V/(A*s)，积分显式乘周期 */
+    float kp_d, ki_d;          /* Kp: V/A；Ki: V/(A*s) */
     float kp_q, ki_q;
-    float period_s;            /* 固定调用周期，单位秒，须与实际采样周期一致 */
-    float current_limit_a;     /* 目标sqrt(Id^2+Iq^2)上限，A；不是硬件过流保护 */
-    float voltage_ratio;       /* (0,1]，电压矢量上限=此比例*Vbus/sqrt(3) ，这里的根号3看图片*/
+    float period_s;            /* 固定控制周期，初始化时预计算Ki*Ts */
+    float current_limit_a;     /* 目标Iq限幅，A；不是硬件过流保护 */
+    float voltage_ratio;       /* (0,1]；1对应Vbus/sqrt(3)，较小值留电压余量。
+                               * 板级驱动还会按低侧采样窗口限制此比例。 */
 } CurrentLoop_Config;
 
 typedef struct {
-    float ia_a, ib_a;          /* 同一采样时刻的A/B相电流，A；正方向星点->绕组->逆变器 */
-    float electrical_deg;      /* 同时刻转子d轴电角度，度；0沿A相，正向A->B->C */
-    float bus_voltage_v;       /* 实际直流母线电压，V */
+    float ia_a, ib_a;          /* A/B相电流，A；正方向为星点->绕组->逆变器 */
+    float electrical_deg;      /* 采样附近的转子d轴电角度，度；0沿A相，正向ABC */
+    float bus_voltage_v;       /* 母线电压，V；当前板级驱动使用可配置估计值 */
 } CurrentLoop_Feedback;
 
 typedef struct {
-    CurrentLoop_Config config;
-    uint8_t motor_id;
-    uint8_t running;
-    float integral_d, integral_q; /* 已乘Ki的积分项，V */
-    float id_a, iq_a;             /* 实测d/q电流，A，由向外为正的相电流变换得到 */
-    float ud_v, uq_v;             /* 限幅后的d/q电压，V */
+    float alpha_v, beta_v;     /* 静止坐标系电压，V；相端对星点为正 */
+} CurrentLoop_Voltage;
+
+typedef struct {
+    float kp, ki_step;         /* ki_step=Ki*Ts */
+    float integral;            /* 已乘Ki的积分项，V */
+} CurrentLoop_PI;
+
+typedef struct {
+    CurrentLoop_PI d, q;       /* 两轴共用同一种PI */
+    float current_limit_a, voltage_ratio;
+    float id_a, iq_a;          /* 本拍实测电流，A，便于调参观察 */
+    float ud_v, uq_v;          /* 本拍限幅后的电压，V */
 } CurrentLoop;
 
-/* 对象/配置指针须有效。Init只保存配置并清状态，不启动PWM。
- * 停止后才能改参数或重新Init；同一对象由一个执行上下文调用。 */
-void CurrentLoop_Init(CurrentLoop *loop, uint8_t motor_id,
-                      const CurrentLoop_Config *config);
-int CurrentLoop_Start(CurrentLoop *loop); /* 1成功，0配置无效；清旧积分 */
-void CurrentLoop_Stop(CurrentLoop *loop); /* 清积分，并调用底层关闭PWM接口 */
+/* 所有指针须有效；同一对象串行调用。修改参数后须在停机时重新Init。
+ * Init返回1成功、0配置无效；Reset只清积分和观测值，保留参数。 */
+int CurrentLoop_Init(CurrentLoop *loop, const CurrentLoop_Config *config);
+void CurrentLoop_Reset(CurrentLoop *loop);
 
-/* 每取得一组新的有效采样调用一次；不能直接沿用20~50ms的CAN周期。
- * target_id_a通常设0；target_iq_a是带符号的转矩电流指令，单位A。
- * 目标与反馈电流均以星点向外为正；同一电角度下，Iq符号与流入电机约定相反。
- * 转矩指令须按此约定换算，车体前进方向仍须按左右轮安装关系换算。
- * 目标电流做圆形限幅；两个PI输出合成后再按母线电压做圆形限幅。
- * 返回1=成功下发；0=未启动或失败。采样/计算/输出失败会Stop，须显式Start恢复。
- * 没有位置/速度外环、弱磁或交叉耦合前馈，属于基础d/q PI电流控制。
- */
-int CurrentLoop_Update(CurrentLoop *loop, float target_id_a, float target_iq_a);
-
-/* ---------- 待实现的三个底层接口 ----------
- * 默认空实现位于.c末尾。可以直接替换；也可对current_loop.c定义
- * CURRENT_LOOP_EXTERNAL_IO，由另一个.c提供这三个函数。
- */
-
-/* 1=读取成功，0=失败/没有本周期新数据。
- * 实现时完成ADC零偏/增益/电流方向换算，必要的相电流重构以及角度零点校准。
- * ia+ib+ic=0用于两相采样重构；不能把直流母线电流当成ia/ib。
- * 低侧分流器只能在有效PWM采样窗口取值；这里不负责采样触发。
- */
-int CurrentLoop_ReadFeedback(uint8_t motor_id, CurrentLoop_Feedback *feedback);
-
-/* 1=本周期电压矢量接受成功，0=失败。
- * 输入为静止alpha/beta坐标系电压(V)，交给逆Clarke/SVPWM更新三相占空比。
- * 电压仍以电机相端对星点为正，不随电流符号定义改变；输出适配层不再取反。
- * alpha轴沿A相，beta轴沿ABC正方向旋转90度。
- * 零电压矢量仍是运行中的控制指令，应输出三相相等的占空比；不等于高阻停机。
- * 可用角度atan2(beta,alpha)、幅值sqrt(alpha^2+beta^2)适配电压型SVPWM；
- * 现有SVPWM_Update只支持正/负q轴电压，不能直接接收完整d/q PI输出。
- */
-int CurrentLoop_WriteVoltage(uint8_t motor_id, float alpha_v, float beta_v);
-
-/* 必须真正关闭该电机驱动输出，不能只清软件变量。当前空实现不操作硬件。 */
-void CurrentLoop_DisablePWM(uint8_t motor_id);
+/* 每取得一组新采样调用一次：坐标变换->双PI->电压限幅->逆变换。
+ * Id目标始终为0；target_iq_a与反馈均以星点向外为正。
+ * 只计算，不读ADC、不操作PWM、不保存另一套运行状态。
+ * 返回1时将voltage交给SVPWM；返回0时调用方必须关闭电机输出。
+ * 输出零电压仍是控制指令，不等于高阻停机。 */
+int CurrentLoop_Update(CurrentLoop *loop, const CurrentLoop_Feedback *feedback,
+                       float target_iq_a, CurrentLoop_Voltage *voltage);
 
 #endif

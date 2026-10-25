@@ -12,7 +12,7 @@ float zero_point_1=0,zero_point_2=0;//记录两个电机在磁编码器特定安
 float first_mechanical_angle=0,second_mechanical_angle=0;//记录电机当前机械角度
 float electrical1=0,electrical2=0;//记录当前电机的电角度 [0°,360°)
 static TIM_TypeDef * const timer[2] = {TIM2, TIM4};
-static uint16_t period;
+static uint16_t period, current_compare_limit;
 static uint8_t ready, running[2], calibrated;
 static int8_t encoder_sign[2];
 
@@ -108,7 +108,7 @@ static void InitPWM(TIM_TypeDef *tim)
     TIM_ClearFlag(tim, TIM_FLAG_Update);
     TIM_Cmd(tim, ENABLE);
 }
-
+/*这个函数要在所有电流环相关代码前调用，否则对应的电流环函数在检查DRV芯片状态的时候大概率出错卡死*/
 int SVPWM_Init(void)
 {
     RCC_ClocksTypeDef clocks;
@@ -120,11 +120,14 @@ int SVPWM_Init(void)
     GPIO_ResetBits(GPIOA, GPIO_Pin_0);
     PinMode(GPIOA, GPIO_Pin_0, GPIO_Mode_Out_PP);
     ready = running[0] = running[1] = 0u;
+    current_compare_limit = 0u;
     ClearCalibration();
     GPIO_PinRemapConfig(GPIO_FullRemap_TIM2, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_TIM4, DISABLE);
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable, ENABLE);
+
     GPIO_ResetBits(GPIOB, GPIO_Pin_4); /* CAL：释放JTAG后拉低，先于EN使能。 */
+    
     PinMode(GPIOB, GPIO_Pin_4, GPIO_Mode_Out_PP);
     PhaseEnable(0u, Bit_RESET);
     PhaseEnable(1u, Bit_RESET);
@@ -315,3 +318,102 @@ int SVPWM_Update(int8_t dir1, int8_t dir2,
 }
 
 
+
+/* 正式电流环的入口：先关两轮，再将TIM2/TIM4从零同步启动。
+ * TIM2_CH1只产生内部OC1REF，不输出到PA0；PA0仍是DRV的EN。
+ * ADC两rank总耗时=(28.5+12.5)*2=82个ADC时钟。
+ * 在计数峰值前半个转换时长触发，使整个序列位于共同低侧窗口中央。 */
+int SVPWM_StartCurrent(uint32_t guard_us, float *voltage_ratio)
+{
+    RCC_ClocksTypeDef clocks;
+    TIM_OCInitTypeDef oc;
+    uint32_t tim_hz, adc_hz, half_sequence, guard, wait;
+    if (!ready || !calibrated || !DriverOK()) return 0;
+    SVPWM_Stop(0u); SVPWM_Stop(1u);
+    RCC_GetClocksFreq(&clocks);
+    tim_hz = clocks.PCLK1_Frequency;
+    if (clocks.PCLK1_Frequency != clocks.HCLK_Frequency) tim_hz *= 2u;
+    adc_hz = clocks.ADCCLK_Frequency;
+    if (adc_hz == 0u || guard_us > 20u) return 0;
+    half_sequence = (41u * tim_hz + adc_hz - 1u) / adc_hz;
+    guard = (tim_hz / 1000000u) * guard_us + 8u; /* 含定时器同步的数拍延迟 */
+    if (half_sequence + guard >= period) return 0;
+    current_compare_limit = (uint16_t)(period - half_sequence - guard);
+    *voltage_ratio = (float)current_compare_limit / period;
+
+    TIM_Cmd(TIM2, DISABLE);
+    TIM_Cmd(TIM4, DISABLE);
+    TIM4->SMCR &= ~TIM_SMCR_SMS;
+    TIM_SelectOutputTrigger(TIM2, TIM_TRGOSource_Enable);
+    TIM_OCStructInit(&oc);
+    oc.TIM_OCMode = TIM_OCMode_PWM2;
+    oc.TIM_OutputState = TIM_OutputState_Disable;
+    oc.TIM_Pulse = (uint16_t)(period - half_sequence);
+    TIM_OC1Init(TIM2, &oc);
+    TIM_OC1PreloadConfig(TIM2, TIM_OCPreload_Enable);
+    TIM_SetCompare2(TIM2, 0u); TIM_SetCompare3(TIM2, 0u); TIM_SetCompare4(TIM2, 0u);
+    TIM_SetCompare2(TIM4, 0u); TIM_SetCompare3(TIM4, 0u); TIM_SetCompare4(TIM4, 0u);
+    /* 强制从向上计数的0开始；UG只在两轮已高阻时发出。 */
+    TIM2->CR1 &= ~(TIM_CR1_CMS | TIM_CR1_DIR);
+    TIM4->CR1 &= ~(TIM_CR1_CMS | TIM_CR1_DIR);
+    TIM2->CR1 |= TIM_CounterMode_CenterAligned1;
+    TIM4->CR1 |= TIM_CounterMode_CenterAligned1;
+    TIM_GenerateEvent(TIM2, TIM_EventSource_Update);
+    TIM_GenerateEvent(TIM4, TIM_EventSource_Update);
+    TIM_SetCounter(TIM2, 0u);
+    TIM_SetCounter(TIM4, 0u);
+    TIM_SelectInputTrigger(TIM4, TIM_TS_ITR1); /* TIM4的ITR1连接TIM2 */
+    TIM_SelectSlaveMode(TIM4, TIM_SlaveMode_Trigger);
+    TIM_Cmd(TIM2, ENABLE); /* TRGO=CEN，硬件同时启动TIM4 */
+    wait = 10000u;
+    while ((TIM4->CR1 & TIM_CR1_CEN) == 0u)
+        if (--wait == 0u) return Fail();
+    TIM4->SMCR &= ~TIM_SMCR_SMS; /* 只需同步启动，不要每次采样都复位计数器 */
+    TIM_SelectOutputTrigger(TIM2, TIM_TRGOSource_OC1Ref);
+    PhaseEnable(0u, Bit_SET); PhaseEnable(1u, Bit_SET);
+    running[0] = running[1] = 1u; /* 三相占空比0：全低侧零矢量，不是高阻 */
+    return 1;
+}
+
+int SVPWM_ReadRotor(uint8_t id, float *mechanical_deg, float *electrical_deg)
+{
+    float mechanical, zero;
+    if (!ready || !calibrated || id > 1u || !DriverOK()) return 0;
+    if (TLE5012B_ReadAngle(id, &mechanical) != TLE_OK) return Fail();
+    zero = id == 0u ? zero_point_1 : zero_point_2;
+    *mechanical_deg = mechanical;
+    *electrical_deg = Wrap360(encoder_sign[id] * SVPWM_POLE_PAIRS * (mechanical - zero));
+    if (id == 0u) { first_mechanical_angle = mechanical; electrical1 = *electrical_deg; }
+    else { second_mechanical_angle = mechanical; electrical2 = *electrical_deg; }
+    return 1;
+}
+
+/* 用相同的公共偏移把最小占空比移至0，不改变三相线电压。
+ * 相比对称零矢量分配，这样把可用零矢量时间留给低侧采样。
+ * PI已按current_compare_limit/period限制电压，不能再额外缩放其输出。 */
+int SVPWM_WriteVoltage(uint8_t id, float alpha_v, float beta_v, float bus_v)
+{
+    float a, b, c, minimum;
+    uint16_t ca, cb, cc;
+    TIM_TypeDef *tim;
+    if (!ready || !calibrated || id > 1u || !running[id] ||
+        current_compare_limit == 0u || !DriverOK() || !(bus_v > 0.0f) ||
+        !isfinite(bus_v) || !isfinite(alpha_v) || !isfinite(beta_v)) return Fail();
+    a = alpha_v / bus_v;
+    b = (-0.5f * alpha_v + 0.86602540378f * beta_v) / bus_v;
+    c = (-0.5f * alpha_v - 0.86602540378f * beta_v) / bus_v;
+    minimum = fminf(a, fminf(b, c));
+    a -= minimum; b -= minimum; c -= minimum;
+    if (fmaxf(a, fmaxf(b, c)) > (float)current_compare_limit / period + 0.00001f)
+        return Fail();
+    ca = Compare(a); cb = Compare(b); cc = Compare(c);
+    /* 仅吸收舍入导致的1个计数误差，不能突破ADC窗口。 */
+    if (ca > current_compare_limit) ca = current_compare_limit;
+    if (cb > current_compare_limit) cb = current_compare_limit;
+    if (cc > current_compare_limit) cc = current_compare_limit;
+    tim = timer[id];
+    TIM_UpdateDisableConfig(tim, ENABLE);
+    TIM_SetCompare2(tim, ca); TIM_SetCompare3(tim, cb); TIM_SetCompare4(tim, cc);
+    TIM_UpdateDisableConfig(tim, DISABLE);
+    return 1;
+}

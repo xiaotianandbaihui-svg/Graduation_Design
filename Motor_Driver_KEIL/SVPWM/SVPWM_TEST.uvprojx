@@ -715,6 +715,31 @@
               <FilePath>.\Hardware\Serial.h</FilePath>
             </File>
             <File>
+              <FileName>current_loop.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\current_loop.c</FilePath>
+            </File>
+            <File>
+              <FileName>current_loop.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\current_loop.h</FilePath>
+            </File>
+            <File>
+              <FileName>motor_current.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Hardware\motor_current.c</FilePath>
+            </File>
+            <File>
+              <FileName>cycle_counter.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\cycle_counter.h</FilePath>
+            </File>
+            <File>
+              <FileName>motor_current.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Hardware\motor_current.h</FilePath>
+            </File>
+            <File>
               <FileName>current_sense.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\Hardware\current_sense.c</FilePath>
