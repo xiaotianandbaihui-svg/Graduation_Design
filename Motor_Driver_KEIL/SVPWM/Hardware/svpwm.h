@@ -7,10 +7,10 @@
 #define SVPWM_MAX_MOD    1000u
 #define SVPWM_POLE_PAIRS 7u
 
-/* 静止对齐幅值，单位与modulation相同；代码接受1~100。
- * 50是调试初值，不是电流限制；太小无法转动时标定会失败。
+/* 静止对齐幅值，单位与modulation相同；代码接受1~500。
+ * 100是调试初值，不是电流限制；太小无法转动时标定会失败。
  * 标定时两轮悬空、可自由转动；不要用手阻挡或转动轮子。 */
-#define SVPWM_ALIGN_MOD 50u
+#define SVPWM_ALIGN_MOD 100u
 
 /* 方向由Motor_init自动测出，不再手填：+1/-1有效，0表示未标定或失效。
  * 表示0->90度定子矢量变化时编码器机械角的增减，不代表车体前进方向。

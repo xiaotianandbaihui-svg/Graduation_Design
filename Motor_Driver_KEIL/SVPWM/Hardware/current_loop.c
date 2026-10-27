@@ -71,17 +71,23 @@ int CurrentLoop_Update(CurrentLoop *loop, const CurrentLoop_Feedback *feedback,
     beta = (feedback->ia_a + 2.0f * feedback->ib_a) * INV_SQRT3;
     loop->id_a = alpha * cosine + beta * sine;
     loop->iq_a = -alpha * sine + beta * cosine;
+
+
     /* 电流星点向外为正、电压相端对星点为正，因此误差取实测-目标。 */
+    /*这里算的其实就是电流误差了*/
     ed = loop->id_a; /* Id目标为0，但Ud不能固定为0 */
     eq = loop->iq_a - target_iq_a;
 
-    /* 电压矢量幅值不超过母线电压的1/sqrt(3)，并保留配置的余量。 */
+
+    /* 电压矢量幅值不超过母线电压的1/sqrt(3)，并保留配置的余量，这个裕量就来自电压比例，电压比例的分母是1000 */
     limit = feedback->bus_voltage_v * INV_SQRT3 * loop->voltage_ratio;
     previous_d = loop->d.integral;
     previous_q = loop->q.integral;
+
+    /*这是首次限幅，算是一个初次限幅，免得数量过大，计算后溢出了，数学上，其实是对最终合成的那个电压矢量进行限幅*/
     raw_d = PI_Output(&loop->d, ed, limit);
     raw_q = PI_Output(&loop->q, eq, limit);
-    magnitude = hypotf(raw_d, raw_q);
+    magnitude = hypotf(raw_d, raw_q);/*平方和开根号，也就是欧氏距离的那个公式*/
     if (!isfinite(magnitude)) goto failed;
 
     /* 限制合成矢量，不能只把Ud、Uq各自限幅。 */
@@ -89,11 +95,13 @@ int CurrentLoop_Update(CurrentLoop *loop, const CurrentLoop_Feedback *feedback,
     if (magnitude > limit) {
         scale = limit / magnitude;
         ud *= scale; uq *= scale;
-    }
+    }/*其实就是超过了，magnitude就规范为limit，(这里是等比例缩小，主要是要保障合成电压矢量的方向不会变)*/
+
+    /*此处会在总的输出合成矢量饱和后防止积分项继续增加，是抗饱和的，但也只是做了个积分抗饱和*/
     PI_AntiWindup(&loop->d, previous_d, raw_d, ud);
     PI_AntiWindup(&loop->q, previous_q, raw_q, uq);
 
-    /* 逆Park：把d/q电压换回静止坐标系，交给SVPWM。 */
+    /* 逆Park：把d/q电压换回静止坐标系，交给SVPWM。*/
     voltage->alpha_v = ud * cosine - uq * sine;
     voltage->beta_v = ud * sine + uq * cosine;
     loop->ud_v = ud; loop->uq_v = uq;

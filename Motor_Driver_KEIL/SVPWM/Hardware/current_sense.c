@@ -51,8 +51,8 @@ int CurrentSense_ReadRaw(CurrentSense_Raw *raw)
     if (!ready || raw == 0 || !DriverActive()) return 0;
     ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
     ADC_ClearFlag(ADC2, ADC_FLAG_JEOC);
-    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
-    ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE); /* ADC1触发双ADC */
+    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);/*重复配置，保险*/
+    ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE); /* ADC1触发双ADC ，这里会打开触发使能的(外部)，其实软件触发的信号也要过这个位使能*/
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == RESET ||
            ADC_GetFlagStatus(ADC2, ADC_FLAG_JEOC) == RESET)
         if (--wait == 0u) return Fail();/*等待转化完成*/
@@ -99,7 +99,7 @@ int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
     return 1;
 }
 
-/*下面这个函数会上电就采样ZERO_SAMPLES次，获得零点偏移量(这个零偏是直接从ADC读出来的原始数据哦)*/
+/*下面这个函数会上电就采样ZERO_SAMPLES次，获得零点偏移量(这个零偏是直接从ADC读出来的原始数据哦)，这个函数会被SVPWM_Init函数调用*/
 int CurrentSense_Init(void)
 {
     GPIO_InitTypeDef gpio;
@@ -136,7 +136,7 @@ int CurrentSense_Init(void)
     adc.ADC_NbrOfChannel = 1u; /* 不启动规则组；下面单独设置注入组长度 */
     adc.ADC_Mode = ADC_Mode_Independent;
     ADC_Init(ADC2, &adc);
-    adc.ADC_Mode = ADC_Mode_InjecSimult;/**/
+    adc.ADC_Mode = ADC_Mode_InjecSimult;
     ADC_Init(ADC1, &adc);
     ADC_InjectedSequencerLengthConfig(ADC1, 2u);
     ADC_InjectedSequencerLengthConfig(ADC2, 2u);
@@ -144,7 +144,7 @@ int CurrentSense_Init(void)
     ADC_InjectedChannelConfig(ADC2, ADC_Channel_6, 1u, ADC_SampleTime_28Cycles5);
     ADC_InjectedChannelConfig(ADC1, ADC_Channel_7, 2u, ADC_SampleTime_28Cycles5);
     ADC_InjectedChannelConfig(ADC2, ADC_Channel_8, 2u, ADC_SampleTime_28Cycles5);
-    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);
+    ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_None);/*这里虽然是先配置为了软件触发，但是后面会改的QAQ*/
     ADC_ExternalTrigInjectedConvConfig(ADC2, ADC_ExternalTrigInjecConv_None);
     ADC_ExternalTrigInjectedConvCmd(ADC2, ENABLE);/*这里不调用ADC1，把外部触发使能是因为：后面触发转化调用函数ADC_SoftwareStartInjectedConvCmd(ADC1, ENABLE)的时候
     这个函数自带使能外部触发的效果，一次性设置触发使能+触发转化 */

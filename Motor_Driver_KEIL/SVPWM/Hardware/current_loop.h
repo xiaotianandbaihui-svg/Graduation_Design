@@ -18,17 +18,17 @@ typedef struct {
 } CurrentLoop_Feedback;
 
 typedef struct {
-    float alpha_v, beta_v;     /* 静止坐标系电压，V；相端对星点为正 */
+    float alpha_v, beta_v;     /* 静止坐标系电压，V；相端对星点为正，这是PI(D)计算出来的最终的电压 */
 } CurrentLoop_Voltage;
 
 typedef struct {
-    float kp, ki_step;         /* ki_step=Ki*Ts */
-    float integral;            /* 已乘Ki的积分项，V */
+    float kp, ki_step;         /* ki_step=Ki*Ts，其实就是积分项 */
+    float integral;            /* 已乘Ki的积分项，累计值 */
 } CurrentLoop_PI;
 
 typedef struct {
     CurrentLoop_PI d, q;       /* 两轴共用同一种PI */
-    float current_limit_a, voltage_ratio;
+    float current_limit_a, voltage_ratio;/*一个是电流限幅，一个是电压比例 */
     float id_a, iq_a;          /* 本拍实测电流，A，便于调参观察 */
     float ud_v, uq_v;          /* 本拍限幅后的电压，V */
 } CurrentLoop;
