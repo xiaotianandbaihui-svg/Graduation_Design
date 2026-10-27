@@ -28,7 +28,7 @@ typedef struct {
 
 typedef struct {
     CurrentLoop_PI d, q;       /* 两轴共用同一种PI */
-    float current_limit_a, voltage_ratio;/*一个是电流限幅，一个是电压比例 */
+    float current_limit_a, voltage_ratio;/*一个是电流限幅(电流限幅限制的是目标电流的幅度)，一个是电压比例，这个电压比例是会基于ADC的配置情况去设置的，SVPWM_StartCurrent函数会设置它*/
     float id_a, iq_a;          /* 本拍实测电流，A，便于调参观察 */
     float ud_v, uq_v;          /* 本拍限幅后的电压，V */
 } CurrentLoop;

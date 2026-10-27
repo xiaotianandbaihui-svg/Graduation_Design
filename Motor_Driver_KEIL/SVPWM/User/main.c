@@ -82,8 +82,12 @@ void TIM3_IRQHandler(void)
     }
 }
 
-
-typedef enum { DRIVE_FEEDBACK, DRIVE_TARGET, DRIVE_PAUSED } DriveStage;
+/*用来表示驱动板当前处于哪个工作阶段*/
+typedef enum {
+    DRIVE_FEEDBACK,  // 等待姿态、腿高数据，随后回传轮速
+    DRIVE_TARGET,    // 等待目标角度，随后计算PID并更新目标Iq
+    DRIVE_PAUSED     // 暂停控制，等待恢复命令
+} DriveStage;
 
 static void Drive_Fault(const char *message)
 {
@@ -112,7 +116,7 @@ int main(void)
 	Balance_Init(1,&for_balance_yaw);
 	Balance_Start(&for_balance_yaw);//开启PID，放心，这里只是把积分项啊这些东西全部清零了
 	IMU_TimerInit();/*初始化定时器3，用于检测CAN超时*/
-	TIM_Cmd(TIM3, ENABLE);
+	TIM_Cmd(TIM3, ENABLE);/*超时检测开！！！！！！但是呢，这个是只针对CAN的*/
 	
 	/*此处进行PID调参*/
 	/*这里特别注意一下调参时候的极性，轮子转动的正方向是电角度正方向！车到时候行驶的正方向是不一定电角度正方向*/
@@ -156,10 +160,14 @@ int main(void)
 	{	
 		/*状态锁死*/
         uint8_t mode;
+
+		/*检查电机是不是处于错误状态*/
         if (MotorCurrent_GetStatus() < 0) {
             printf("Current fault: %d\n", (int)MotorCurrent_GetStatus());
             Drive_Fault("Current loop stopped");
         }
+
+
         NVIC_DisableIRQ(USB_LP_CAN1_RX0_IRQn);
         mode = CAN_DriveCommand;
         CAN_DriveCommand = CAN_DRIVE_NONE;
@@ -184,12 +192,12 @@ int main(void)
             continue; /* PID已停止、PWM已关闭；不更新输出，也不回传轮速。 */
         }
 		
-
+		
 
 		/*跳跃停机*/
 		if(go==1)
 		{
-			if (MotorCurrent_GetStatus() == MOTOR_CURRENT_STOPPED) {
+			if (MotorCurrent_GetStatus() == MOTOR_CURRENT_STOPPED) {/*电机只要是停了，就要把电机启动*/
                 CAN_Time_Out_Counter = 0;
                 if (!MotorCurrent_Start()) {
                     printf("Current start fault: %d\n", (int)MotorCurrent_GetStatus());
@@ -199,7 +207,7 @@ int main(void)
             /* 主循环只算外环并发布Iq目标；TIM1独立完成电流采样和PWM更新。 */
 			if(if_We_Should_Infrom_Main_Function_to_PID==0x01&&stage==DRIVE_FEEDBACK)
 			{
-				stage=DRIVE_TARGET;
+				stage=DRIVE_TARGET;/*进入等待目标角度的阶段*/
 				if(MotorCurrent_ReadSpeed(&angle_speed_1,&angle_speed_2)==0)/*读取轮子速度，单位：rpm*/
 				{
 						/*错误处理，暂且不做复杂处理，如果出现严重“挖地，学牢大坠机”的情况，我们考虑直接停机作为处理方法，平常的调试，此处可以打印信息*/

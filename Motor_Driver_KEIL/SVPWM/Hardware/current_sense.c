@@ -66,7 +66,10 @@ int CurrentSense_ReadRaw(CurrentSense_Raw *raw)
 }
 
 /* TIM2的OC1REF上升沿触发；两轮PWM已同步，并由SVPWM限制占空比保证窗口。
- * 只接收本次使能外触发之后的新序列。DWT由motor_current初始化。 */
+ * 只接收本次使能外触发之后的新序列。DWT由motor_current初始化。 
+ 
+ 总的来说：这个函数就是等待下一次合适的 PWM 采样时机，让两个 ADC 同步转换，然后读出两台电机的四路原始电流采样值。
+ */
 int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
 {
     uint32_t began = CycleCounter_Now();
@@ -78,17 +81,20 @@ int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
     ADC_ClearFlag(ADC2, ADC_FLAG_JEOC);
     /* 先等OC1REF明确为低，再打开触发；下一次真正的上升沿才开始采样。
      * 留半个CCR1的距离，避免在OC1REF已经为高时使能外部触发。 */
-    while (TIM2->CNT >= TIM2->CCR1 / 2u)
-        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u)
+    while (TIM2->CNT >= TIM2->CCR1 / 2u)/*这里的CCR1就是通过ADC配置得到的那个上升沿跳变点*/
+        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u)/*超过200us没到，就认为超时*/
             return Fail();
-    ADC_ExternalTrigInjectedConvCmd(ADC1, ENABLE);
+
+    
+    ADC_ExternalTrigInjectedConvCmd(ADC1, ENABLE);/*开启触发，等待转化完成*/
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == RESET ||
            ADC_GetFlagStatus(ADC2, ADC_FLAG_JEOC) == RESET) {
         if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u) {
             ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE); /* 最多等待200us */
             return Fail();
         }
-    }
+    }/*只等待200us*/
+
     ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
     sample.a[0] = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_1);
     sample.b[0] = ADC_GetInjectedConversionValue(ADC2, ADC_InjectedChannel_1);
