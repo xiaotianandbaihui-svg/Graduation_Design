@@ -54,7 +54,12 @@ extern LegIK_Angles Left_LegIK_Angles ;
 extern LegIK_Angles Right_LegIK_Angles;
 PID Speed_PID;/*给电机驱动板的PID，根据目标速度和当前速度求出需要的倾角pitch*/
 FootPID Foot_PID;/*足端位置的PID*/
+
+/*-----------------------------------------遥控接口----------------------------------------*/
+/*这个目标速度和current_target_angle_pitch_yaw[1]还有Jump_Request 就是Lora模块应该接受的数据了*/
 volatile float target_Speed=0.0f;/*目标速度，单位是：rpm*/
+/*----------------------------------------------------------------------------------------*/
+
 #else
 volatile float the_angles[2]={0};//应当依次为Pitch、Yaw角,接收主控传来的角度信息
 volatile  float leg_height[2]={0};//标记腿高也就是y坐标的，由上位机发送而来
@@ -90,11 +95,13 @@ static void IMU_TimerInit(void)
     TIM_Cmd(TIM2, DISABLE);
 }
 uint16_t inner_counter=0;/*软件分频器*/
+extern uint32_t  counter_no_remote_control_message;
 void TIM2_IRQHandler(void)
 {
     if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET) {
         TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
         control_time_ms += IMU_PERIOD_MS;
+        counter_no_remote_control_message+=IMU_PERIOD_MS;
         inner_counter++;
         if(inner_counter>=20)
         {
@@ -189,16 +196,18 @@ int main(void)
     FootPID_Init(&Foot_PID);
     if (Leg_SetFootPositions(current_leg_x, current_leg_height) != LEG_IK_OK)
         Control_Fault("Initial foot position rejected");
+    TIM_Cmd(TIM2,ENABLE);
 
     while (1) {
         float wheels[2], next_x[2], next_y[2], accel_g;
-        uint32_t now_ms;
+
+        Serial_ProcessControl(); /* 接收遥控目标，保持PID和跳跃在主循环执行 */
+
         if (Robot_State == ROBOT_FAULT) Control_Fault("Jump failed");
         if (Robot_State == ROBOT_NORMAL && CAN_Time_Out_Counter > 3)
             Control_Fault("CAN Time Out");
         if (!flag_to_update) continue;
         NVIC_DisableIRQ(TIM2_IRQn);
-        now_ms = control_time_ms;
         flag_to_update = 0;
         NVIC_EnableIRQ(TIM2_IRQn);
 
@@ -218,10 +227,11 @@ int main(void)
             }
         }
         if (Robot_State != ROBOT_NORMAL) {
-            int8_t result = Jump_Update(now_ms, accel_g);
+            int8_t result = Jump_Update(control_time_ms, accel_g);
             if (result == JUMP_ERROR) Control_Fault("Jump failed");
             if (result == JUMP_LANDED) Resume_Control();
-            continue; /* 跳跃只运行姿态解算和跳跃状态机，不运行PID或周期CAN收发。 */
+            continue; /* 跳跃只运行姿态解算和跳跃状态机，不运行PID或周期CAN收发。  这个continue也会彻底屏蔽掉信息发送
+            这里的代码顺序是绝对不能更改的！！！靠的就是这个continue的屏蔽作用！！ */
         }
 
         while (!CAN_Angle_and_LegHeight_Send_First_Package(
@@ -262,6 +272,7 @@ int main(void)
 
 		    TIM_Cmd(TIM2, ENABLE);
     while (1) {
+        Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
 				if(flag_to_update==1)
 				{
 					flag_to_update=0;
