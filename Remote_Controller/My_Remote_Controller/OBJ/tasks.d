@@ -1,4 +1,4 @@
-..\obj\tasks.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\tasks.c
+..\obj\tasks.o: ..\FreeRTOS\tasks.c
 ..\obj\tasks.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
 ..\obj\tasks.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\tasks.o: ..\FreeRTOS\include\FreeRTOS.h

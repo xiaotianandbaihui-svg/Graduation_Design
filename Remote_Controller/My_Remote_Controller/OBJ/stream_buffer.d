@@ -1,4 +1,4 @@
-..\obj\stream_buffer.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\stream_buffer.c
+..\obj\stream_buffer.o: ..\FreeRTOS\stream_buffer.c
 ..\obj\stream_buffer.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\stream_buffer.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\stream_buffer.o: ..\FreeRTOS\include\FreeRTOS.h

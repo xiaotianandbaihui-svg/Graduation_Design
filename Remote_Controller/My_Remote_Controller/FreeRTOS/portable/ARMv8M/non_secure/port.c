@@ -807,7 +807,7 @@ void vPortExitCritical( void ) /* PRIVILEGED_FUNCTION */
     }
 }
 /*-----------------------------------------------------------*/
-
+/*Systick中断优先级是最低的，和PendSV坐一桌的*/
 void SysTick_Handler( void ) /* PRIVILEGED_FUNCTION */
 {
     uint32_t ulPreviousMask;

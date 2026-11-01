@@ -1,4 +1,4 @@
-..\obj\croutine.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\croutine.c
+..\obj\croutine.o: ..\FreeRTOS\croutine.c
 ..\obj\croutine.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\croutine.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
 ..\obj\croutine.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h

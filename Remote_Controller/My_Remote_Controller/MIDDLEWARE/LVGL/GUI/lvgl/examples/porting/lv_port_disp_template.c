@@ -16,7 +16,7 @@
 /*********************
  *      DEFINES
  *********************/
-#define MY_DISP_HOR_RES 800 //Ë®Æ½ÏñËØ800¸ö
+#define MY_DISP_HOR_RES 800 //Ë®Æ½ï¿½ï¿½ï¿½ï¿½800ï¿½ï¿½
 
 /**********************
  *      TYPEDEFS
@@ -42,8 +42,8 @@ static void disp_flush(lv_disp_drv_t * disp_drv, const lv_area_t * area, lv_colo
 /**********************
  *   GLOBAL FUNCTIONS
  **********************/
- void lcd_dma_init(void);
- static lv_disp_drv_t *g_drv;           /* È«¾ÖÖ¸Õë£¬ÖÐ¶ÏÀïÓÃ */
+ static void lcd_dma_init(void);
+ static lv_disp_drv_t *g_drv;           /* È«ï¿½ï¿½Ö¸ï¿½ë£¬ï¿½Ð¶ï¿½ï¿½ï¿½ï¿½ï¿½ */
 void lv_port_disp_init(void)
 {
     /*-------------------------
@@ -83,9 +83,9 @@ void lv_port_disp_init(void)
 
 //    /* Example for 2) */
     static lv_disp_draw_buf_t draw_buf_dsc_2;
-    static lv_color_t buf_2_1[MY_DISP_HOR_RES * 20] __attribute__((aligned(4)));                        /*A buffer for 10 rows*/
-    static lv_color_t buf_2_2[MY_DISP_HOR_RES * 20] __attribute__((aligned(4)));                        /*An other buffer for 10 rows*/
-    lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2, MY_DISP_HOR_RES * 20);   /*Initialize the display buffer*/
+    static lv_color_t buf_2_1[MY_DISP_HOR_RES * 10] __attribute__((aligned(4)));                        /*A buffer for 10 rows*/
+    static lv_color_t buf_2_2[MY_DISP_HOR_RES * 10] __attribute__((aligned(4)));                        /*An other buffer for 10 rows*/
+    lv_disp_draw_buf_init(&draw_buf_dsc_2, buf_2_1, buf_2_2, MY_DISP_HOR_RES * 10);   /*Initialize the display buffer*/
 
 //    /* Example for 3) also set disp_drv.full_refresh = 1 below*/
 //    static lv_disp_draw_buf_t draw_buf_dsc_3;
@@ -147,8 +147,8 @@ static void disp_flush(lv_disp_drv_t * disp_drv, const lv_area_t * area, lv_colo
 		uint32_t w = lv_area_get_width(area);
     uint32_t h = lv_area_get_height(area);
 
-    LCD_Set_Window(area->x1, area->y1, w, h);    /* CPU Í¬²½Ð´ 0x2A/0x2B */
-    LCD_WriteRAM_Prepare();                /* ·¢ 0x2C£¬Ãû×ÖÒÔÄãµÄ¿âÎª×¼ */
+    LCD_Set_Window(area->x1, area->y1, w, h);    /* CPU Í¬ï¿½ï¿½Ð´ 0x2A/0x2B */
+    LCD_WriteRAM_Prepare();                /* ï¿½ï¿½ 0x2Cï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½Îª×¼ */
 
     DMA_ClearFlag(DMA2_Stream0, DMA_FLAG_TCIF0 | DMA_FLAG_HTIF0 |
                                 DMA_FLAG_TEIF0 | DMA_FLAG_DMEIF0 | DMA_FLAG_FEIF0);
@@ -188,12 +188,12 @@ static void lcd_dma_init(void)
     while (DMA_GetCmdStatus(DMA2_Stream0) != DISABLE);
 
     d.DMA_Channel            = DMA_Channel_0;
-    d.DMA_PeripheralBaseAddr = 0;                          /* Ô´(PAR)£¬flush ÀïÉèÖÃ */
-    d.DMA_Memory0BaseAddr    = (uint32_t)&LCD->LCD_RAM;    /* Ä¿µÄ(M0AR)£¬¹Ì¶¨ */
+    d.DMA_PeripheralBaseAddr = 0;                          /* Ô´(PAR)ï¿½ï¿½flush ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    d.DMA_Memory0BaseAddr    = (uint32_t)&LCD->LCD_RAM;    /* Ä¿ï¿½ï¿½(M0AR)ï¿½ï¿½ï¿½Ì¶ï¿½ */
     d.DMA_DIR                = DMA_DIR_MemoryToMemory;
-    d.DMA_BufferSize         = 1;                          /* flush ÀïÉèÖÃ */
-    d.DMA_PeripheralInc      = DMA_PeripheralInc_Enable;   /* Ô´×ÔÔö */
-    d.DMA_MemoryInc          = DMA_MemoryInc_Disable;      /* Ä¿µÄ²»×ÔÔö */
+    d.DMA_BufferSize         = 1;                          /* flush ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ */
+    d.DMA_PeripheralInc      = DMA_PeripheralInc_Enable;   /* Ô´ï¿½ï¿½ï¿½ï¿½ */
+    d.DMA_MemoryInc          = DMA_MemoryInc_Disable;      /* Ä¿ï¿½Ä²ï¿½ï¿½ï¿½ï¿½ï¿½ */
     d.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
     d.DMA_MemoryDataSize     = DMA_MemoryDataSize_HalfWord;
     d.DMA_Mode               = DMA_Mode_Normal;

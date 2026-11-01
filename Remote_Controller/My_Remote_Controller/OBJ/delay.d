@@ -44,3 +44,5 @@
 ..\obj\delay.o: ..\FreeRTOS\include\deprecated_definitions.h
 ..\obj\delay.o: ..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h
 ..\obj\delay.o: ..\FreeRTOS\include\mpu_wrappers.h
+..\obj\delay.o: ..\FreeRTOS\include\task.h
+..\obj\delay.o: ..\FreeRTOS\include\list.h

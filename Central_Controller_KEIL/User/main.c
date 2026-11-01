@@ -2,6 +2,7 @@
 #include "Serial.h"
 #include "mpu6500_spi.h"
 #include <stdio.h>
+#include <math.h>
 #include "can_pitch.h"
 #include "zf_device_imu963ra.h"
 #include "IMU.h"
@@ -11,7 +12,10 @@
 #include "balance_pid.h"
 #include "jump.h"
 
-#define IMU_PERIOD_MS  1u       /* 定时通知主循环；需要20ms就改为20u */
+#define IMU_PERIOD_MS  1u       /* TIM2时基，单位ms */
+#define IMU_UPDATE_DIVIDER_PID 50u  /* 每50次中断解算一次：当前实际周期50ms ,这个是PID特供*/
+#define IMU_UPDATE_DIVIDER_JUMP 20u  /* 每20次中断检查一次Jump：当前实际周期20ms ,这个是Jump特供*/
+
 #if IMU_PERIOD_MS < 1u || IMU_PERIOD_MS > 50u
 #error IMU_PERIOD_MS_must_be_1_to_50
 #endif
@@ -22,11 +26,11 @@ extern int16_t imu963ra_acc_x,  imu963ra_acc_y,  imu963ra_acc_z;        // 三�
 extern int16_t imu963ra_mag_x,  imu963ra_mag_y,  imu963ra_mag_z;        // 三轴磁力计数据      MAG  (magnetometer 磁力计)
 
 /*滤波后的的原始数据*/
- int16_t imu963ra_gyro_x_out, imu963ra_gyro_y_out, imu963ra_gyro_z_out ;       // 三轴陀螺仪数据      GYRO (陀螺仪)
- int16_t imu963ra_acc_x_out,  imu963ra_acc_y_out,  imu963ra_acc_z_out;        // 三轴加速度计数据     ACC  (accelerometer 加速度计)
- int16_t imu963ra_mag_x_out,  imu963ra_mag_y_out,  imu963ra_mag_z_out;        // 三轴磁力计数据      MAG  (magnetometer 磁力计)
+float imu963ra_gyro_x_out, imu963ra_gyro_y_out, imu963ra_gyro_z_out ;       // 三轴陀螺仪数据      GYRO (陀螺仪)
+float imu963ra_acc_x_out,  imu963ra_acc_y_out,  imu963ra_acc_z_out;        // 三轴加速度计数据     ACC  (accelerometer 加速度计)
+float imu963ra_mag_x_out,  imu963ra_mag_y_out,  imu963ra_mag_z_out;        // 三轴磁力计数据      MAG  (magnetometer 磁力计)
 uint8_t flag_filter_run=0;//滤波器首次启动，用于去除缓拟合的
-float alpha_for_acc=0.45,alpha_for_gyro=0.4,alpha_for_mag=0.45;
+float alpha_for_acc=0.45,alpha_for_gyro=0.4,alpha_for_mag=1;
 /*转化后的数据*/
 float imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition;
 float imu963ra_acc_x_transition,  imu963ra_acc_y_transition,  imu963ra_acc_z_transition;
@@ -35,7 +39,7 @@ float imu963ra_mag_x_transition,  imu963ra_mag_y_transition,  imu963ra_mag_z_tra
 extern volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID;/*定时器触发发送消息到驱动后，驱动立刻回传轮子转速数值，之后进入主控进行PID得到对应的目标Pitch，再把目标角度回传回去，给驱动做PID*/
 extern volatile uint32_t CAN_Time_Out_Counter;/*CAN超时计数器*/
 
-#define Formal 2
+#define Formal 3
 #define Central_Driver 1
 
 
@@ -44,7 +48,7 @@ float angle[3];                      /* Pitch、Yaw、Roll，度；仅主循环�
 volatile float Speed[2]={0};//双轮转速,单位是：rpm
 /* TIM2累计毫秒，可自然回绕；跳跃按无符号差值计时，不清零这个公共时钟。 */
 static volatile uint32_t control_time_ms;/*一个全局时钟，允许回绕。。*/
-volatile uint8_t flag_to_update;/*到时间就发送角度*/
+volatile uint8_t flag_to_update_PID=0,flag_to_update_Jump=0,PID_and_Transfer_Data=0;/*到时间就发送角度*/
 /* 初始目标采用合法工作区内的宏；首次下发成功后表示最近一次指令位置。 */
  float current_leg_height[2]={FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};/*足端Y位置初始化*/
  float current_leg_x[2]={FOOT_INITIAL_X_MM, FOOT_INITIAL_X_MM};/*足端X位置初始化*/
@@ -84,7 +88,8 @@ static void IMU_TimerInit(void)
     timer.TIM_Period = IMU_PERIOD_MS*1000u-1u;
     TIM_TimeBaseInit(TIM2, &timer);
     TIM_ClearITPendingBit(TIM2, TIM_IT_Update); /* 清除初始化UG产生的UIF */
-    flag_to_update = 0;
+    flag_to_update_PID = 0;
+    flag_to_update_Jump = 0;
     /* Serial_Init已设置分组2，TIM2优先于USART1接收中断。 */
     nvic.NVIC_IRQChannel = TIM2_IRQn;
     nvic.NVIC_IRQChannelPreemptionPriority = 0;
@@ -94,19 +99,24 @@ static void IMU_TimerInit(void)
     TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
     TIM_Cmd(TIM2, DISABLE);
 }
-uint16_t inner_counter=0;/*软件分频器*/
-extern uint32_t  counter_no_remote_control_message;
+uint16_t inner_counter_PID=0;/*软件分频器_PID专供*/
+uint16_t inner_counter_Jump=0;/*软件分频器_Jump专供*/
 void TIM2_IRQHandler(void)
 {
     if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET) {
         TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
         control_time_ms += IMU_PERIOD_MS;
-        counter_no_remote_control_message+=IMU_PERIOD_MS;
-        inner_counter++;
-        if(inner_counter>=20)
+        inner_counter_PID++;
+        inner_counter_Jump++;
+        if(inner_counter_Jump>=IMU_UPDATE_DIVIDER_JUMP)
         {
-            inner_counter=0;
-            flag_to_update = 1;
+            inner_counter_Jump=0;
+            flag_to_update_Jump = 1;
+        }
+        if(inner_counter_PID>=IMU_UPDATE_DIVIDER_PID)
+        {
+            inner_counter_PID=0;
+            flag_to_update_PID = 1;
 		    CAN_Time_Out_Counter++;//计数自增
         }
     }
@@ -165,7 +175,7 @@ static void Read_Attitude(void)
             use_acc ? imu963ra_acc_z_transition : 0.0f,
             imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition,
             imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition,
-            &angle[2], &angle[0], &angle[1], IMU_PERIOD_MS*0.001f))
+            &angle[0], &angle[2], &angle[1], IMU_PERIOD_MS*IMU_UPDATE_DIVIDER_PID*0.001f))
         Control_Fault("IMU attitude invalid");
 }
 
@@ -191,6 +201,7 @@ int main(void)
     Serial_Init();
     if (!CAN_Init_Together()) Control_Fault("CAN init failed");
     while (imu963ra_init()) {}
+    Delay_s(5);/*先等待一下,等待IMU完全稳定，经过测试，不等待稳定会出现BUG*/
     IMU_TimerInit(); /* 仍由调试启动处开启TIM2 */
     SpeedPID_Init(&Speed_PID);
     FootPID_Init(&Foot_PID);
@@ -206,9 +217,14 @@ int main(void)
         if (Robot_State == ROBOT_FAULT) Control_Fault("Jump failed");
         if (Robot_State == ROBOT_NORMAL && CAN_Time_Out_Counter > 3)
             Control_Fault("CAN Time Out");
-        if (!flag_to_update) continue;
+
+        
+        if (!flag_to_update_PID && !flag_to_update_Jump) continue;
+        if(flag_to_update_PID)
+            PID_and_Transfer_Data=1;
         NVIC_DisableIRQ(TIM2_IRQn);
-        flag_to_update = 0;
+        flag_to_update_PID = 0;
+        flag_to_update_Jump = 0;
         NVIC_EnableIRQ(TIM2_IRQn);
 
         accel_g = Read_Acceleration();
@@ -233,30 +249,68 @@ int main(void)
             continue; /* 跳跃只运行姿态解算和跳跃状态机，不运行PID或周期CAN收发。  这个continue也会彻底屏蔽掉信息发送
             这里的代码顺序是绝对不能更改的！！！靠的就是这个continue的屏蔽作用！！ */
         }
-
-        while (!CAN_Angle_and_LegHeight_Send_First_Package(
-                   angle[0], angle[1], current_leg_height[0], current_leg_height[1]))
-            if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
-        while (!CAN_TakeWheelSpeed(wheels))
-            if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
-        if (!SpeedPID_Update(&Speed_PID, target_Speed, wheels, &current_target_angle_pitch_yaw[0]))
-            Control_Fault("Speed PID invalid");
-        while (!CAN_Angle_and_LegHeight_Send_Second_Package(
-                   current_target_angle_pitch_yaw[0], current_target_angle_pitch_yaw[1]))
-            if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
-        if (FootPID_Update(&Foot_PID, angle[2], wheels,
-                current_leg_x, current_leg_height, next_x, next_y)) {
-            LegIK_Result status = Leg_SetFootPositions(next_x, next_y);
-            if (status == LEG_IK_OK) {
-                for (unsigned i = 0; i < 2; ++i) {
-                    current_leg_x[i] = next_x[i];
-                    current_leg_height[i] = next_y[i];
-                }
-            } else printf("Foot position rejected: %d\n", (int)status);
+        if(PID_and_Transfer_Data) {
+            PID_and_Transfer_Data=0;
+            while (!CAN_Angle_and_LegHeight_Send_First_Package(
+                    angle[0], angle[1], current_leg_height[0], current_leg_height[1]))
+                if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
+            while (!CAN_TakeWheelSpeed(wheels))
+                if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
+            if (!SpeedPID_Update(&Speed_PID, target_Speed, wheels, &current_target_angle_pitch_yaw[0]))
+                Control_Fault("Speed PID invalid");
+            while (!CAN_Angle_and_LegHeight_Send_Second_Package(
+                    current_target_angle_pitch_yaw[0], current_target_angle_pitch_yaw[1]))
+                if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
+            if (FootPID_Update(&Foot_PID, angle[2], wheels,
+                    current_leg_x, current_leg_height, next_x, next_y)) {
+                LegIK_Result status = Leg_SetFootPositions(next_x, next_y);
+                if (status == LEG_IK_OK) {
+                    for (unsigned i = 0; i < 2; ++i) {
+                        current_leg_x[i] = next_x[i];
+                        current_leg_height[i] = next_y[i];
+                    }
+                } else printf("Foot position rejected: %d\n", (int)status);
+            }
         }
     }
 }
-#elif (Formal==2) /*调试用*/
+#elif (Formal==2) /*调试用，带磁力计*/
+/* 仅调试模式上电采集。正式模式使用IMU.h中已经填写的校准参数。 */
+static void Calibrate_Magnetometer(void)
+{
+#if !MAG_USE_PRESET_CALIBRATION
+    uint32_t i;
+    for (;;) {
+        Mag_Calibrate_Begin();
+        printf("MAG CAL: slowly rotate/flip through all X/Y/Z directions.\n");
+        printf("Keep away from magnets/steel. Do not only turn flat.\n");
+        for (i = 0; i < MAG_CAL_SAMPLES; ++i) {
+            imu963ra_get_mag();
+            if (imu963ra_spi_error) Control_Fault("IMU SPI error");
+            Mag_Calibrate_Collect(imu963ra_mag_transition(imu963ra_mag_x),
+                                  imu963ra_mag_transition(imu963ra_mag_y),
+                                  imu963ra_mag_transition(imu963ra_mag_z));
+            if (i % 250u == 0u)
+                printf("MAG CAL %lu/%lu\n", (unsigned long)i, (unsigned long)MAG_CAL_SAMPLES);
+            Delay_ms(MAG_CAL_SAMPLE_MS);
+        }
+        if (Mag_Calibrate_Finish()) break;
+        printf("MAG CAL retry: insufficient XYZ span or severe distortion.\n");
+    }
+#endif
+    printf("MAG CAL OK. Copy these measured values into IMU.h to reuse:\n");
+    printf("#define MAG_USE_PRESET_CALIBRATION 1\n");
+    printf("#define MAG_BIAS_X_G %.6ff\n", mag_calib.bias[0]);
+    printf("#define MAG_BIAS_Y_G %.6ff\n", mag_calib.bias[1]);
+    printf("#define MAG_BIAS_Z_G %.6ff\n", mag_calib.bias[2]);
+    printf("#define MAG_SCALE_X %.6ff\n", mag_calib.scale[0]);
+    printf("#define MAG_SCALE_Y %.6ff\n", mag_calib.scale[1]);
+    printf("#define MAG_SCALE_Z %.6ff\n", mag_calib.scale[2]);
+    printf("Place IMU level and still; starting in 2 seconds.\n");
+    Delay_ms(2000u);
+    printf("Pitch,Yaw,Roll,MagHeading,mx_raw,my_raw,mz_raw\n");
+}
+
 int main(void)
 {
     
@@ -267,20 +321,24 @@ int main(void)
 	IMU_TimerInit();/*来个定时老弟*/
 //	Servo_Init(SERVO_PERIOD_US);/*20000us也就是20ms*/
 //	CAN_Init_Together();/*CAN初始化*/
+	printf("Start\n");
 	while(imu963ra_init()){};/*陀螺仪初始化*/
-		printf("OK\n");
+	printf("OK\n");
+    Delay_s(5);/*先等待一下*/
+    Calibrate_Magnetometer();
 
-		    TIM_Cmd(TIM2, ENABLE);
+		TIM_Cmd(TIM2, ENABLE);
     while (1) {
-        Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
-				if(flag_to_update==1)
+        //Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
+				if(flag_to_update_PID==1)
 				{
-					flag_to_update=0;
+					flag_to_update_PID=0;
 					
 					imu963ra_get_acc();
 					imu963ra_get_gyro();
 					imu963ra_get_mag();
                     if (imu963ra_spi_error) Control_Fault("IMU SPI error");
+                    uint32_t sampled_ms = control_time_ms; /* 同一采样时刻同时用于dt及下次基准 */
 					if(!flag_filter_run)
 					{
 						imu963ra_acc_x_out=imu963ra_acc_x;
@@ -292,7 +350,18 @@ int main(void)
 						imu963ra_mag_x_out=imu963ra_mag_x;
 						imu963ra_mag_y_out=imu963ra_mag_y;
 						imu963ra_mag_z_out=imu963ra_mag_z;
+                        /* 校准结束后的第一帧直接建立初始姿态，避免从Yaw=0慢慢追赶。 */
+                        if (!IMU_ResetAttitude(
+                                imu963ra_acc_transition(imu963ra_acc_x_out),
+                                imu963ra_acc_transition(imu963ra_acc_y_out),
+                                imu963ra_acc_transition(imu963ra_acc_z_out),
+                                imu963ra_mag_transition(imu963ra_mag_x_out),
+                                imu963ra_mag_transition(imu963ra_mag_y_out),
+                                imu963ra_mag_transition(imu963ra_mag_z_out),
+                                &angle[2], &angle[0], &angle[1])) continue;
 						flag_filter_run=1;
+                        now_ms = sampled_ms;
+                        continue;
 					}
 					imu963ra_acc_x_out+=alpha_for_acc*(imu963ra_acc_x-imu963ra_acc_x_out);
 					imu963ra_acc_y_out+=alpha_for_acc*(imu963ra_acc_y-imu963ra_acc_y_out);
@@ -317,34 +386,116 @@ int main(void)
 					imu963ra_mag_z_transition=imu963ra_mag_transition(imu963ra_mag_z_out);
 
                     						
-                    uint32_t record_time=control_time_ms-now_ms;
+                    uint32_t record_time = sampled_ms - now_ms;
+                    now_ms = sampled_ms;
 					if (!IMU_9Axis_Gyro_Acc_Mag(imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition, 
 					imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition, 
 					imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition, 
-					&angle[2], &angle[0], &angle[1], record_time*0.001f))
+					&angle[0], &angle[2], &angle[1], record_time*0.001f))
                         Control_Fault("IMU attitude invalid");
-                    now_ms=control_time_ms;
                  //   printf("%ld,%f,%f,%f\n",record_time,angle[0],angle[1],angle[2]);
 				 //	printf("%d,%d,%d,%d,%d,%d\n",imu963ra_gyro_x_out,imu963ra_gyro_y_out,imu963ra_gyro_z_out,imu963ra_gyro_x,imu963ra_gyro_y,imu963ra_gyro_z);				
                 //  printf("%d,%d,%d,%d,%d,%d\n",imu963ra_mag_x_out,imu963ra_mag_y_out,imu963ra_mag_z_out,imu963ra_mag_x,imu963ra_mag_y,imu963ra_mag_z);				
-                    float mag_heading = atan2f(
-                        -(float)imu963ra_mag_y_out,
-                        (float)imu963ra_mag_x_out
-                    ) * RAD_TO_DEG;
-
+                    float mag_heading;
+                    /* 两个解算函数各自校准局部副本一次，不能先校准transition再传入。 */
+                    if (!Mag_GetHeading(imu963ra_mag_x_transition, imu963ra_mag_y_transition,
+                                        imu963ra_mag_z_transition, angle[2], angle[0], &mag_heading))
+                        mag_heading = NAN;
+                    /* 最后三列仍是滤波后的原始计数；第4列为校准+倾斜补偿后的磁航向。 */
                     printf("%.2f,%.2f,%.2f,%.2f,%d,%d,%d\n",
-                        angle[0],angle[1],angle[2], mag_heading,
+                        angle[0],angle[2],angle[1], mag_heading,
                         (int)imu963ra_mag_x_out,
                         (int)imu963ra_mag_y_out,
                         (int)imu963ra_mag_z_out);
                         
 				}
-
 //					Delay_ms(IMU_PERIOD_MS);
 //					data=spi_read_write_byte(SPI2,0XA5);
 //					printf("%c\n",data);
 
     }
 }
-#endif
+#elif (Formal==3) /*调试用，不带磁力计*/
 
+int main(void)
+{
+    
+    uint32_t now_ms=0;
+
+//	Servo_Init(SERVO_PERIOD_US); /* TIM3: no pulses until Servo_SetPulse/Servo_SetAngle. */
+	Serial_Init();/*来个串口，我板子上应该花了接口，先打开*/
+	IMU_TimerInit();/*来个定时老弟*/
+//	Servo_Init(SERVO_PERIOD_US);/*20000us也就是20ms*/
+//	CAN_Init_Together();/*CAN初始化*/
+	printf("Start\n");
+	while(imu963ra_init()){};/*陀螺仪初始化*/
+	printf("OK\n");
+    Delay_s(5);/*先等待一下,等待IMU完全稳定*/
+   // Calibrate_Magnetometer();
+
+		TIM_Cmd(TIM2, ENABLE);
+    while (1) {
+        //Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
+				if(flag_to_update_PID==1)
+				{
+					flag_to_update_PID=0;
+					
+					imu963ra_get_acc();
+					imu963ra_get_gyro();
+					imu963ra_get_mag();
+                    if (imu963ra_spi_error) Control_Fault("IMU SPI error");
+                    uint32_t sampled_ms = control_time_ms; /* 同一采样时刻同时用于dt及下次基准 */
+					if(!flag_filter_run)
+					{
+                        flag_filter_run=1;
+						imu963ra_acc_x_out=imu963ra_acc_x;
+						imu963ra_acc_y_out=imu963ra_acc_y;
+						imu963ra_acc_z_out=imu963ra_acc_z;
+						imu963ra_gyro_x_out=imu963ra_gyro_x;
+						imu963ra_gyro_y_out=imu963ra_gyro_y;
+						imu963ra_gyro_z_out=imu963ra_gyro_z;
+						imu963ra_mag_x_out=imu963ra_mag_x;
+						imu963ra_mag_y_out=imu963ra_mag_y;
+						imu963ra_mag_z_out=imu963ra_mag_z;
+                        /* 校准结束后的第一帧直接建立初始姿态，避免从Yaw=0慢慢追赶。 */
+                        continue;
+					}
+					imu963ra_acc_x_out+=alpha_for_acc*(imu963ra_acc_x-imu963ra_acc_x_out);
+					imu963ra_acc_y_out+=alpha_for_acc*(imu963ra_acc_y-imu963ra_acc_y_out);
+					imu963ra_acc_z_out+=alpha_for_acc*(imu963ra_acc_z-imu963ra_acc_z_out);
+					imu963ra_gyro_x_out+=alpha_for_gyro*(imu963ra_gyro_x-imu963ra_gyro_x_out);
+					imu963ra_gyro_y_out+=alpha_for_gyro*(imu963ra_gyro_y-imu963ra_gyro_y_out);
+					imu963ra_gyro_z_out+=alpha_for_gyro*(imu963ra_gyro_z-imu963ra_gyro_z_out);
+					imu963ra_mag_x_out+=alpha_for_mag*(imu963ra_mag_x-imu963ra_mag_x_out);
+					imu963ra_mag_y_out+=alpha_for_mag*(imu963ra_mag_y-imu963ra_mag_y_out);
+					imu963ra_mag_z_out+=alpha_for_mag*(imu963ra_mag_z-imu963ra_mag_z_out);
+
+                    						
+					imu963ra_acc_x_transition=imu963ra_acc_transition(imu963ra_acc_x_out);
+					imu963ra_acc_y_transition=imu963ra_acc_transition(imu963ra_acc_y_out);
+					imu963ra_acc_z_transition=imu963ra_acc_transition(imu963ra_acc_z_out);
+					imu963ra_gyro_x_transition=imu963ra_gyro_transition(imu963ra_gyro_x_out);
+					imu963ra_gyro_y_transition=imu963ra_gyro_transition(imu963ra_gyro_y_out);
+					imu963ra_gyro_z_transition=imu963ra_gyro_transition(imu963ra_gyro_z_out);
+
+                    uint32_t record_time = sampled_ms - now_ms;
+                    now_ms = sampled_ms;
+					IMU_6Axis_Gyro_Acc(imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition, 
+					imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition,  
+					&angle[0], &angle[2], &angle[1], record_time*0.001f);
+                 //   printf("%ld,%f,%f,%f\n",record_time,angle[0],angle[1],angle[2]);
+				 //	printf("%d,%d,%d,%d,%d,%d\n",imu963ra_gyro_x_out,imu963ra_gyro_y_out,imu963ra_gyro_z_out,imu963ra_gyro_x,imu963ra_gyro_y,imu963ra_gyro_z);				
+                //  printf("%d,%d,%d,%d,%d,%d\n",imu963ra_mag_x_out,imu963ra_mag_y_out,imu963ra_mag_z_out,imu963ra_mag_x,imu963ra_mag_y,imu963ra_mag_z);				
+                    /* 最后三列仍是滤波后的原始计数；第4列为校准+倾斜补偿后的磁航向。 */
+										static float timer=0;
+                    angle[1]-=(-0.082*timer-0.1181);
+                    printf("%.2f,%.2f\n",timer,angle[1]);
+										timer+=0.05;                        
+				}
+//					Delay_ms(IMU_PERIOD_MS);
+//					data=spi_read_write_byte(SPI2,0XA5);
+//					printf("%c\n",data);
+
+    }
+}
+#endif 

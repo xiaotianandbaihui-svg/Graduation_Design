@@ -18,7 +18,7 @@ uint8_t go=0;//轮足开始运行的总开关，初始的时候为0
 
 
 #define IMU_PERIOD_MS 10//陀螺仪刷新周期，单位ms
-#define CAN_Time_Out_Threshold 6//CAN超时阈值
+#define CAN_Time_Out_Threshold 15//CAN超时阈值
 #define USE_DIFFERENT_PID_ARGUMENTS 0//是否使用不同的PID参数，1为使用，0为不使用
 #define Central_Driver 0
 #define Formal 1 //用来控制代码调试模式和正式模式，我比较蠢咯，这种方法也不错QWQ，主要是硬件没到，现在的工作都是“预制软件”

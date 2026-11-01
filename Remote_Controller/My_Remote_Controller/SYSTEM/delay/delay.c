@@ -1,94 +1,69 @@
 #include "delay.h"
-#include "sys.h"
-////////////////////////////////////////////////////////////////////////////////// 	 
-//如果使用OS,则包括下面的头文件（以ucos为例）即可.
 #if SYSTEM_SUPPORT_OS
-#include "FreeRTOS.h"					//支持OS时，使用	  
+#include "FreeRTOS.h"
+#include "task.h"
 #endif
 
+static u32 fac_us;
 
-static u8  fac_us=0;							//us延时倍乘数			   
-	
+/* 只在启动调度器前初始化一次；FreeRTOS接管后仍使用HCLK/8。 */
 void delay_init(u8 SYSCLK)
 {
-#if SYSTEM_SUPPORT_OS 						//如果需要支持OS.
-	u32 reload;
-#endif
- 	SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8); 
-	fac_us=SYSCLK/8;						//不论是否使用OS,fac_us都需要使用
-#if SYSTEM_SUPPORT_OS 						//如果需要支持OS.
-	reload=SYSCLK/8;						//每秒钟的计数次数 单位为M	   
-	reload*=1000000/1000;	//freertos就是1ms，1khz
-											//reload为24位寄存器,最大值:16777216,在168M下,约合0.7989s左右	
-	SysTick->CTRL|=SysTick_CTRL_TICKINT_Msk;   	//开启SYSTICK中断
-	SysTick->LOAD=reload; 					//每1/delay_ostickspersec秒中断一次	
-	SysTick->CTRL|=SysTick_CTRL_ENABLE_Msk; 	//开启SYSTICK    
-#else
-	fac_ms=(u16)fac_us*1000;				//非OS下,代表每个ms需要的systick时钟数   
-#endif
-}								    
+    fac_us = SYSCLK / 8u;
+    SysTick->CTRL = 0u;
+    SysTick_CLKSourceConfig(SysTick_CLKSource_HCLK_Div8);
+    SysTick->LOAD = 0x00FFFFFFu;
+    SysTick->VAL = 0u;
+    /* 启动前只开计数，不开中断，避免提前进入FreeRTOS的SysTick处理。 */
+    SysTick->CTRL |= SysTick_CTRL_ENABLE_Msk;
+}
+/*这个初始化函数这么用其实是这样的：
+vTaskStartScheduler()
+    → xPortStartScheduler()
+        → vPortSetupTimerInterrupt()
+之后：在底层函数里
+SysTick->CTRL = 0;       
+SysTick->VAL  = 0;       
+SysTick->LOAD = configSYSTICK_CLOCK_HZ / configTICK_RATE_HZ - 1;
 
-#if SYSTEM_SUPPORT_OS 						//如果需要支持OS.
-//延时nus
-//nus:要延时的us数.	
-//nus:0~204522252(最大值即2^32/fac_us@fac_us=21)	    								   
+SysTick->CTRL = SysTick_CTRL_ENABLE_Msk
+              | SysTick_CTRL_TICKINT_Msk;        
+ */
+
+
+
+/* 忙等阻塞；任务中暂停调度但保留中断，结束后恢复原有调度状态。 */
 void delay_us(u32 nus)
-{		
-	u32 ticks;
-	u32 told,tnow,tcnt=0;
-	u32 reload=SysTick->LOAD;				//LOAD的值	    	 
-	ticks=nus*fac_us; 						//需要的节拍数 
-	vTaskSuspendAll();					//阻止OS调度，防止打断us延时
-	told=SysTick->VAL;        				//刚进入时的计数器值
-	while(1)
-	{
-		tnow=SysTick->VAL;	
-		if(tnow!=told)
-		{	    
-			if(tnow<told)tcnt+=told-tnow;	//这里注意一下SYSTICK是一个递减的计数器就可以了.
-			else tcnt+=reload-tnow+told;	    
-			told=tnow;
-			if(tcnt>=ticks)break;			//时间超过/等于要延迟的时间,则退出.
-		}  
-	};
-	vTaskSuspendAll();					//恢复OS调度											    
-}  
+{
+    u32 reload, ticks, told, tnow, tcnt, part;
+#if SYSTEM_SUPPORT_OS
+    BaseType_t scheduler_started;
+#endif
+    if (nus == 0u) return;
+#if SYSTEM_SUPPORT_OS
+    scheduler_started = xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED;
+    if (scheduler_started) vTaskSuspendAll();
+#endif
+    reload = SysTick->LOAD + 1u; /* 递减计数器从LOAD数到0，共LOAD+1拍。 */
+    while (nus) {
+        /* 分段只为防止乘法溢出；整次调用仍然阻塞，不受单次回绕限制。 */
+        part = nus > 1000000u ? 1000000u : nus;
+        ticks = part * fac_us;
+        tcnt = 0u;
+        told = SysTick->VAL;
+        while (tcnt < ticks) {
+            tnow = SysTick->VAL;
+            tcnt += told >= tnow ? told - tnow : reload - tnow + told;
+            told = tnow;
+        }
+        nus -= part;
+    }
+#if SYSTEM_SUPPORT_OS
+    if (scheduler_started) (void)xTaskResumeAll();
+#endif
+}
 
 void delay_ms(u16 nms)
-{	
-	delay_us((u32)(nms*1000));				//普通方式延时
+{
+    delay_us((u32)nms * 1000u);
 }
-#endif
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

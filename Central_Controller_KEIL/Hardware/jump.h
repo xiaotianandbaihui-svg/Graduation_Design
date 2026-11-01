@@ -19,7 +19,7 @@
 #define JUMP_RECOVER_MS        FOOT_INITIAL_SETTLE_MS /* 回到中间位置后等多久恢复普通控制，待实测 */
 #define JUMP_BUFFER_STEP_MM     2.0f             /* 触地后每个采样周期缩腿量，待实测 */
 #define JUMP_TIMEOUT_MS       1500u              /* 起跳到触地的最长等待，不含缓冲/恢复 */
-#define JUMP_SAMPLE_MS        FOOT_PID_PERIOD_MS
+#define JUMP_SAMPLE_MS        20.0f              /* 跳跃状态机采样周期，ms；与main.c的IMU_UPDATE_DIVIDER_JUMP规定的时间保持一致 */
 #define JUMP_AIR_G              0.35f
 #define JUMP_AIR_SAMPLES        3u
 #define JUMP_LAND_G             0.80f

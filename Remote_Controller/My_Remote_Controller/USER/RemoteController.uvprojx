@@ -399,6 +399,66 @@
               <FileType>1</FileType>
               <FilePath>.\system_stm32f4xx.c</FilePath>
             </File>
+            <File>
+              <FileName>app_tasks.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\app_tasks.c</FilePath>
+            </File>
+            <File>
+              <FileName>app_tasks.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\app_tasks.h</FilePath>
+            </File>
+            <File>
+              <FileName>task_config.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\task_config.c</FilePath>
+            </File>
+            <File>
+              <FileName>task_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\task_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>remote_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\remote_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>remote_control.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\remote_control.h</FilePath>
+            </File>
+            <File>
+              <FileName>remote_dashboard.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\remote_dashboard.c</FilePath>
+            </File>
+            <File>
+              <FileName>remote_dashboard.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\remote_dashboard.h</FilePath>
+            </File>
+            <File>
+              <FileName>remote_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\remote_ui.c</FilePath>
+            </File>
+            <File>
+              <FileName>remote_ui.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\remote_ui.h</FilePath>
+            </File>
+            <File>
+              <FileName>remote_font.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\remote_font.c</FilePath>
+            </File>
+            <File>
+              <FileName>remote_font.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\remote_font.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
@@ -532,37 +592,37 @@
             <File>
               <FileName>croutine.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\croutine.c</FilePath>
+              <FilePath>..\FreeRTOS\croutine.c</FilePath>
             </File>
             <File>
               <FileName>event_groups.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\event_groups.c</FilePath>
+              <FilePath>..\FreeRTOS\event_groups.c</FilePath>
             </File>
             <File>
               <FileName>list.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\list.c</FilePath>
+              <FilePath>..\FreeRTOS\list.c</FilePath>
             </File>
             <File>
               <FileName>queue.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\queue.c</FilePath>
+              <FilePath>..\FreeRTOS\queue.c</FilePath>
             </File>
             <File>
               <FileName>stream_buffer.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\stream_buffer.c</FilePath>
+              <FilePath>..\FreeRTOS\stream_buffer.c</FilePath>
             </File>
             <File>
               <FileName>tasks.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\tasks.c</FilePath>
+              <FilePath>..\FreeRTOS\tasks.c</FilePath>
             </File>
             <File>
               <FileName>timers.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\timers.c</FilePath>
+              <FilePath>..\FreeRTOS\timers.c</FilePath>
             </File>
             <File>
               <FileName>FreeRTOSConfig.h</FileName>

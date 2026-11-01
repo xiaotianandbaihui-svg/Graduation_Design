@@ -1,4 +1,4 @@
-..\obj\list.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\list.c
+..\obj\list.o: ..\FreeRTOS\list.c
 ..\obj\list.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
 ..\obj\list.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\list.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h

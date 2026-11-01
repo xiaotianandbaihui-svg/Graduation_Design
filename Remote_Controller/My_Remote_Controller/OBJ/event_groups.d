@@ -1,4 +1,4 @@
-..\obj\event_groups.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\event_groups.c
+..\obj\event_groups.o: ..\FreeRTOS\event_groups.c
 ..\obj\event_groups.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
 ..\obj\event_groups.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\event_groups.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h

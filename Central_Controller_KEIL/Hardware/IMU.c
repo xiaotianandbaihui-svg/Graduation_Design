@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <math.h>
+#include <float.h>
 #include "IMU.h"
 
 /*用于存储姿态的四元数*/
@@ -163,7 +164,7 @@ void IMU_6Axis_Gyro_Acc(float ax, float ay, float az,
 	float ez = ax * vy - ay * vx;
 	
 	/*误差补偿*/
-	float Kp = 0.2f;		//PI互补滤波器的Kp系数，决定了四元数姿态贴近加速度计姿态的快慢
+	float Kp = 5.0f;		//PI互补滤波器的Kp系数，决定了四元数姿态贴近加速度计姿态的快慢
 	float Ki = 0.1f;		//PI互补滤波器的Ki系数，用于消除稳态误差，此值过大可能导致不稳定
 	static float exInt, eyInt, ezInt;	//积分变量
 	
@@ -196,7 +197,6 @@ void IMU_6Axis_Gyro_Acc(float ax, float ay, float az,
 	*pitch = asinf(2.0f * (q0*q2 - q1*q3)) * RAD_TO_DEG;
     *yaw = atan2f(2.0f*(q1*q2 + q0*q3), 1.0f - 2.0f*(q2*q2 + q3*q3)) * RAD_TO_DEG;
 }
-void Mag_Apply_Calibration(float *mx, float *my, float *mz);
 
 /**
   * 函    数：9轴姿态解算（使用加速度计、陀螺仪和磁力计互补滤波融合）
@@ -214,7 +214,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
                           float mx, float my, float mz,
                           float *roll, float *pitch, float *yaw, float dt)
 {
-    const float Kp = 4.0f, Ki = 0.01f;
+    const float Kp = 5.0f, Ki = 0.01f;
     float norm, ex = 0.0f, ey = 0.0f, ez = 0.0f;
     float ix, iy, iz, n0, n1, n2, n3, sin_pitch;
     float q0q1 = q0*q1, q0q2 = q0*q2, q0q3 = q0*q3;
@@ -241,7 +241,7 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     if (!isfinite(norm)) return 0;
     /* 磁力计首帧未就绪时可以为零，跳过本次磁场校正。 */
     if (norm > 0.000001f) {
-        //Mag_Apply_Calibration(&mx, &my, &mz);
+        Mag_Apply_Calibration(&mx, &my, &mz);
         norm = sqrtf(mx*mx + my*my + mz*mz);
         if (!isfinite(norm)) return 0;
     }
@@ -283,76 +283,81 @@ int IMU_9Axis_Gyro_Acc_Mag(float ax, float ay, float az,
     return 1;
 }
 
-/*磁力计校准程序*/
-typedef struct {
-    float bias[3];      // 硬铁偏置 (offset)
-    float scale[3];     // 各轴缩放系数
-    uint8_t calibrated; // 是否已校准
-} MagCalib_t;
-
+/* 磁力计：最值法硬铁偏置+三轴比例修正。采样与应用统一使用G。 */
 MagCalib_t mag_calib = {
-    .bias  = {0.0f, 0.0f, 0.0f},
-    .scale = {1.0f, 1.0f, 1.0f},
-    .calibrated = 0
+    {MAG_BIAS_X_G, MAG_BIAS_Y_G, MAG_BIAS_Z_G},
+    {MAG_SCALE_X, MAG_SCALE_Y, MAG_SCALE_Z},
+    MAG_USE_PRESET_CALIBRATION
 };
+static float mag_min[3], mag_max[3];
+static uint32_t mag_sample_count;
+
+void Mag_Calibrate_Begin(void)
+{
+    uint8_t i;
+    for (i = 0; i < 3; ++i) {
+        mag_min[i] = FLT_MAX;
+        mag_max[i] = -FLT_MAX;
+    }
+    mag_sample_count = 0;
+}
+
 void Mag_Calibrate_Collect(float mx, float my, float mz)
 {
-    static float mag_min[3] = { 9999.0f,  9999.0f,  9999.0f};
-    static float mag_max[3] = {-9999.0f, -9999.0f, -9999.0f};
-    static uint32_t sample_cnt = 0;
-
-    // 更新最大最小值
-    if (mx < mag_min[0]) mag_min[0] = mx;
-    if (mx > mag_max[0]) mag_max[0] = mx;
-    if (my < mag_min[1]) mag_min[1] = my;
-    if (my > mag_max[1]) mag_max[1] = my;
-    if (mz < mag_min[2]) mag_min[2] = mz;
-    if (mz > mag_max[2]) mag_max[2] = mz;
-
-    sample_cnt++;
-
-    // 建议采集至少 800~1500 个点再计算
-    if (sample_cnt >= 1200)
-    {
-        // 计算硬铁偏置（椭圆中心）
-        mag_calib.bias[0] = (mag_max[0] + mag_min[0]) * 0.5f;
-        mag_calib.bias[1] = (mag_max[1] + mag_min[1]) * 0.5f;
-        mag_calib.bias[2] = (mag_max[2] + mag_min[2]) * 0.5f;
-
-        // 计算各轴半径
-        float radius[3];
-        radius[0] = (mag_max[0] - mag_min[0]) * 0.5f;
-        radius[1] = (mag_max[1] - mag_min[1]) * 0.5f;
-        radius[2] = (mag_max[2] - mag_min[2]) * 0.5f;
-
-        // 取平均半径作为参考
-        float avg_radius = (radius[0] + radius[1] + radius[2]) / 3.0f;
-
-        // 计算缩放系数（把各轴拉成接近圆形）
-        mag_calib.scale[0] = avg_radius / radius[0];
-        mag_calib.scale[1] = avg_radius / radius[1];
-        mag_calib.scale[2] = avg_radius / radius[2];
-
-        mag_calib.calibrated = 1;
-        sample_cnt = 0;   // 可选：重置，方便多次校准
-
-        // 这里可以打印或保存校准结果
-        // printf("Mag Calib Done!\n");
-        // printf("Bias: %.2f, %.2f, %.2f\n", mag_calib.bias[0], mag_calib.bias[1], mag_calib.bias[2]);
-        // printf("Scale: %.3f, %.3f, %.3f\n", mag_calib.scale[0], mag_calib.scale[1], mag_calib.scale[2]);
+    float sample[3] = {mx, my, mz};
+    uint8_t i;
+    if (!isfinite(mx) || !isfinite(my) || !isfinite(mz)) return;
+    if (mx == 0.0f && my == 0.0f && mz == 0.0f) return; /* 尚未收到磁场数据 */
+    for (i = 0; i < 3; ++i) {
+        if (sample[i] < mag_min[i]) mag_min[i] = sample[i];
+        if (sample[i] > mag_max[i]) mag_max[i] = sample[i];
     }
+    ++mag_sample_count;
 }
+
+int Mag_Calibrate_Finish(void)
+{
+    MagCalib_t next;
+    float radius[3], average, smallest, largest;
+    uint8_t i;
+    if (mag_sample_count < MAG_CAL_MIN_SAMPLES) return 0;
+    for (i = 0; i < 3; ++i) {
+        radius[i] = (mag_max[i] - mag_min[i]) * 0.5f;
+        if (!isfinite(radius[i]) || radius[i] < MAG_CAL_MIN_SPAN_G * 0.5f) return 0;
+        next.bias[i] = (mag_max[i] + mag_min[i]) * 0.5f;
+    }
+    smallest = fminf(radius[0], fminf(radius[1], radius[2]));
+    largest = fmaxf(radius[0], fmaxf(radius[1], radius[2]));
+    if (largest > smallest * MAG_CAL_MAX_RADIUS_RATIO) return 0;
+    average = (radius[0] + radius[1] + radius[2]) / 3.0f;
+    for (i = 0; i < 3; ++i) next.scale[i] = average / radius[i];
+    next.calibrated = 1;
+    mag_calib = next; /* 三轴都通过后一起提交；校准期间不反复改变融合基准 */
+    exInt9 = eyInt9 = ezInt9 = 0.0f;
+    return 1;
+}
+
 void Mag_Apply_Calibration(float *mx, float *my, float *mz)
 {
     if (!mag_calib.calibrated) return;
+    *mx = (*mx - mag_calib.bias[0]) * mag_calib.scale[0];
+    *my = (*my - mag_calib.bias[1]) * mag_calib.scale[1];
+    *mz = (*mz - mag_calib.bias[2]) * mag_calib.scale[2];
+}
 
-    // 先减偏置（硬铁）
-    float x = *mx - mag_calib.bias[0];
-    float y = *my - mag_calib.bias[1];
-    float z = *mz - mag_calib.bias[2];
-
-    // 再乘缩放（简单软铁）
-    *mx = x * mag_calib.scale[0];
-    *my = y * mag_calib.scale[1];
-    *mz = z * mag_calib.scale[2];
+int Mag_GetHeading(float mx, float my, float mz, float roll_deg, float pitch_deg,
+                   float *heading_deg)
+{
+    float r, p, hx, hy, norm;
+    norm = sqrtf(mx*mx + my*my + mz*mz);
+    if (!isfinite(norm) || norm < 0.000001f) return 0;
+    Mag_Apply_Calibration(&mx, &my, &mz);
+    r = roll_deg * DEG_TO_RAD;
+    p = pitch_deg * DEG_TO_RAD;
+    hx = mx*cosf(p) + (my*sinf(r) + mz*cosf(r))*sinf(p);
+    hy = my*cosf(r) - mz*sinf(r);
+    norm = hypotf(hx, hy);
+    if (!isfinite(norm) || norm < 0.000001f) return 0;
+    *heading_deg = atan2f(-hy, hx) * RAD_TO_DEG;
+    return 1;
 }

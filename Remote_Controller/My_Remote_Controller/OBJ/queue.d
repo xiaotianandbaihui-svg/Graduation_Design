@@ -1,4 +1,4 @@
-..\obj\queue.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\queue.c
+..\obj\queue.o: ..\FreeRTOS\queue.c
 ..\obj\queue.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
 ..\obj\queue.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\queue.o: ..\FreeRTOS\include\FreeRTOS.h

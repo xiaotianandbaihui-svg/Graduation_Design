@@ -1,4 +1,5 @@
 #include "sys.h"
+#include "remote_control.h"
 #include "usart.h"	
 ////////////////////////////////////////////////////////////////////////////////// 	 
 //如果使用ucos,则包括下面的头文件即可.
@@ -70,6 +71,10 @@ void uart_init(u32 bound){
 	USART_InitTypeDef USART_InitStructure;
 	NVIC_InitTypeDef NVIC_InitStructure;
 	
+    /* DWT供串口发送及LoRa收发超时计时，不依赖delay_init，也不清零公共计数器。 */
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE); //使能GPIOA时钟
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1,ENABLE);//使能USART1时钟
  
@@ -113,23 +118,48 @@ void uart_init(u32 bound){
 }
 
 
-void USART1_IRQHandler(void)                	//串口1中断服务程序
+/* ISR只校验并缓存完整回传；控制目标和界面仍由GUI任务处理。 */
+void USART1_IRQHandler(void)
 {
-	u16 Res;
-#if SYSTEM_SUPPORT_OS 		//如果SYSTEM_SUPPORT_OS为真，则需要支持OS.
-	taskENTER_CRITICAL();    
-#endif
-	if(USART_GetITStatus(USART1, USART_IT_RXNE) != RESET)  //接收中断(接收到的数据必须是0x0d 0x0a结尾)
-	{
-		Res =USART_ReceiveData(USART1);//(USART1->DR);	//读取接收到的数据
-  } 
-#if SYSTEM_SUPPORT_OS 	//如果SYSTEM_SUPPORT_OS为真，则需要支持OS.
-	taskEXIT_CRITICAL();  											 
-#endif
-} 
+    u8 byte;
+    u32 status = USART1->SR;
+    if (!(status & (USART_SR_RXNE | USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)))
+        return;
+    byte = (u8)USART1->DR; /* 先读SR再读DR，清接收/错误状态 */
+    if (status & (USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) {
+        RemoteControl_ResetRx();
+        return;
+    }
+    RemoteControl_ReceiveByte(byte);
+}
+
 #endif	
 
  
 
 
 
+
+/* 完整帧只在任务上下文发送。短暂暂停任务切换，防止其他任务printf插入帧中；
+ * 中断仍响应。8字节/115200约0.7ms，20ms超时防止外设异常卡死界面。
+ * printf不要放在ISR里；本函数成功只表示UART发完，不代表LoRa对端已收到。 */
+int uart_send_bytes(const u8 *data, u16 length)
+{
+    u16 i;
+    u32 began = DWT->CYCCNT;
+    u32 timeout = (SystemCoreClock / 1000u) * UART_SEND_TIMEOUT_MS;
+    int ok = 1;
+    vTaskSuspendAll();
+    for (i = 0; i < length; ++i) {
+        while (USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET) {
+            if ((u32)(DWT->CYCCNT - began) >= timeout) { ok = 0; goto done; }
+        }
+        USART_SendData(USART1, data[i]);
+    }
+    while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET) {
+        if ((u32)(DWT->CYCCNT - began) >= timeout) { ok = 0; break; }
+    }
+done:
+    (void)xTaskResumeAll();
+    return ok;
+}

@@ -48,7 +48,9 @@
 
 #define configUSE_PREEMPTION			1
 #define configUSE_IDLE_HOOK				0
-#define configUSE_TICK_HOOK				0
+#define configUSE_TICK_HOOK				1
+/* 与delay_init一致：STM32F407的SysTick外部时钟为HCLK/8。这里可不能瞎改 */
+#define configSYSTICK_CLOCK_HZ ( SystemCoreClock / 8u )
 #define configCPU_CLOCK_HZ				( SystemCoreClock )
 #define configTICK_RATE_HZ				( ( TickType_t ) 1000 )
 #define configMAX_PRIORITIES			( 5 )
@@ -76,6 +78,7 @@
 
 /* Set the following definitions to 1 to include the API function, or zero
 to exclude the API function. */
+#define INCLUDE_xTaskGetSchedulerState 1
 #define INCLUDE_vTaskPrioritySet		1
 #define INCLUDE_uxTaskPriorityGet		1
 #define INCLUDE_vTaskDelete				1

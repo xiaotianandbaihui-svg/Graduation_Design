@@ -33,6 +33,8 @@ extern u8  USART_RX_BUF[USART_REC_LEN]; //½ÓÊÕ»º³å,×î´óUSART_REC_LEN¸ö×Ö½Ú.Ä©×Ö½
 extern u16 USART_RX_STA;         		//½ÓÊÕ×´Ì¬±ê¼Ç	
 //Èç¹ûÏë´®¿ÚÖĞ¶Ï½ÓÊÕ£¬Çë²»Òª×¢ÊÍÒÔÏÂºê¶¨Òå
 void uart_init(u32 bound);
+#define UART_SEND_TIMEOUT_MS 20u
+int uart_send_bytes(const u8 *data, u16 length); /* ÈÎÎñÖĞ·¢ËÍÍêÕû¶ş½øÖÆÖ¡£¬1³É¹¦/0³¬Ê± */
 #endif
 
 

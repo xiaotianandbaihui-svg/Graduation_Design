@@ -1,4 +1,4 @@
-..\obj\timers.o: ..\..\FreeRTOS\FreeRTOSv202212.01\FreeRTOS\Source\timers.c
+..\obj\timers.o: ..\FreeRTOS\timers.c
 ..\obj\timers.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stdlib.h
 ..\obj\timers.o: ..\FreeRTOS\include\FreeRTOS.h
 ..\obj\timers.o: D:\My_Keil\Keil_v5\ARM\ARMCC\Bin\..\include\stddef.h
