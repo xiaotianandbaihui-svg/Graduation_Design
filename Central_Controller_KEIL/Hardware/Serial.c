@@ -112,10 +112,13 @@ int Serial_SendFeedback(float speed_rpm, float yaw_deg)
     scaled = speed_rpm * 10.0f;
     if (scaled > 32767.0f) scaled = 32767.0f;
     if (scaled < -32768.0f) scaled = -32768.0f;
-    speed = (int16_t)(scaled + (scaled >= 0.0f ? 0.5f : -0.5f));
+    speed = (int16_t)(scaled + (scaled >= 0.0f ? 0.5f : -0.5f));/*四舍五入*/
+
+    /*将得到的角度，规范到[-180°,180°)*/
     scaled = fmodf(yaw_deg + 180.0f, 360.0f);
     if (scaled < 0.0f) scaled += 360.0f;
-    scaled = (scaled - 180.0f) * 100.0f;
+    scaled = (scaled - 180.0f) * 100.0f;/*发达一百倍，保留小数点后两位数据*/
+
     yaw = (int16_t)(scaled + (scaled >= 0.0f ? 0.5f : -0.5f));
     frame[0] = 0x55u; frame[1] = 0xAAu;
     frame[2] = (uint8_t)speed; frame[3] = (uint8_t)((uint16_t)speed >> 8);

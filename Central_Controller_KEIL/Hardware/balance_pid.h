@@ -25,7 +25,7 @@ float PID_Update(PID *p, float error);
  * Roll左右等量反向纠偏，平均腿高左右等量同向调整；二者合成后统一下发。
  * x输出作为配平点偏移，两腿逐步接近同一目标x。
  * 以下数值是调试入口，不是实测参数。改变周期后需要重新整定。 */
-#define FOOT_PID_PERIOD_MS             50u
+#define FOOT_PID_PERIOD_MS             20u
 #ifndef FOOT_ROLL_KP
 #define FOOT_ROLL_KP                   0.1f /* mm/(deg*次)，符号由实测纠偏方向决定 */
 #endif

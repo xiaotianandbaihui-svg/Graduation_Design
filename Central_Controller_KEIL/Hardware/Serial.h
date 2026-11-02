@@ -10,7 +10,7 @@
 #define SERIAL_CONTROL_FRAME_SIZE 8u
 #define SERIAL_FEEDBACK_FRAME_SIZE 7u
 #define SERIAL_LORA_TIMEOUT_MS    10000u /* 超过此间隔没有完整有效目标帧，目标速度归零 */
-#define SERIAL_TX_TIMEOUT_MS      20u    /* 本地串口发送等待上限，不是无线响应超时 */
+#define SERIAL_TX_TIMEOUT_MS      18u    /* 本地串口发送等待上限，不是无线响应超时 */
 
 /* 中断置位、Serial_ProcessControl消费：bit0有新目标，bit1有跳跃沿。 */
 extern volatile uint8_t Serial_ControlPending;

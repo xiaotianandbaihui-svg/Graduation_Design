@@ -77,7 +77,7 @@ void RemoteControl_Init(void)
     last_send_ms = 0u;
     send_now = 1u;
 }
-
+/*把速度(m/s)转化为转速(rpm)*/
 float RemoteControl_SpeedToRpm(float speed_mps)
 {
     return speed_mps * 60.0f / (REMOTE_PI * REMOTE_WHEEL_DIAMETER_M);
