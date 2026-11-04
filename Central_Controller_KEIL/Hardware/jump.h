@@ -17,9 +17,10 @@
 #define JUMP_PREP_DELAY_MS      80u              /* 收腿后等多久放回中间位置，待实测 */
 #define JUMP_LOW_HOLD_MS       100u              /* 缓冲到最短指令后的等待，待实测 */
 #define JUMP_RECOVER_MS        FOOT_INITIAL_SETTLE_MS /* 回到中间位置后等多久恢复普通控制，待实测 */
-#define JUMP_BUFFER_STEP_MM     2.0f             /* 触地后每个采样周期缩腿量，待实测 */
+#define JUMP_BUFFER_STEP_MM     2.0f             /* 触地后每个缓冲周期缩腿量，待实测 */
 #define JUMP_TIMEOUT_MS       1500u              /* 起跳到触地的最长等待，不含缓冲/恢复 */
-#define JUMP_SAMPLE_MS        20.0f              /* 跳跃状态机采样周期，ms；与main.c的IMU_UPDATE_DIVIDER_JUMP规定的时间保持一致 */
+#define JUMP_SAMPLE_MS          20u              /* 仅离地/触地加速度采样间隔，不限制阶段等待 */
+#define JUMP_BUFFER_PERIOD_MS   20u              /* 每次缓冲缩腿间隔，独立于加速度采样/PID/姿态 */
 #define JUMP_AIR_G              0.35f
 #define JUMP_AIR_SAMPLES        3u
 #define JUMP_LAND_G             0.80f
@@ -36,10 +37,12 @@
 extern volatile uint8_t Jump_Request;
 
 /* Start前须确认驱动板已暂停。冻结当前x和左右高度差；三组目标都合法才下发。
- * 重复Start不重启动作；Update每周期接收一份新的加速度模长(g)。
+ * 重复Start不重启动作；Update由主循环每轮调用，now_ms传control_time_ms。
+ * 阶段等待每轮检查；离地/触地检测才按JUMP_SAMPLE_MS读取加速度。
+ * 不读取陀螺仪/磁力计，不触发姿态解算；缓冲使用独立毫秒间隔。
  * 动作失败进入ROBOT_FAULT，不能自动恢复；无单独的锁、phase或运行标志。
  * LANDED只在恢复完成的那次调用返回，表示指令等待结束，不是机械位置反馈。 */
 int8_t Jump_Start(uint32_t now_ms);
-int8_t Jump_Update(uint32_t now_ms, float accel_g);
+int8_t Jump_Update(uint32_t now_ms);
 
 #endif

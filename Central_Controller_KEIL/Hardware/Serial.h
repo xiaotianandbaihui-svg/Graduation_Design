@@ -4,12 +4,12 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#define SERIAL_BAUD_RATE          115200u /* USART1：PA9发送、PA10接收，8N1 */
+#define SERIAL_BAUD_RATE          115200u 
 #define SERIAL_CONTROL_HEAD1      0xAAu
 #define SERIAL_CONTROL_HEAD2      0x55u
 #define SERIAL_CONTROL_FRAME_SIZE 8u
 #define SERIAL_FEEDBACK_FRAME_SIZE 7u
-#define SERIAL_LORA_TIMEOUT_MS    10000u /* 超过此间隔没有完整有效目标帧，目标速度归零 */
+#define SERIAL_LORA_TIMEOUT_MS    1000u /* 超过此间隔没有完整有效目标帧，目标速度归零 */
 #define SERIAL_TX_TIMEOUT_MS      18u    /* 本地串口发送等待上限，不是无线响应超时 */
 
 /* 中断置位、Serial_ProcessControl消费：bit0有新目标，bit1有跳跃沿。 */
@@ -42,6 +42,8 @@ void Serial_SendArray(uint8_t *Array, uint16_t Length);
 void Serial_SendString(char *String);
 void Serial_SendNumber(uint32_t Number, uint8_t Length);
 void Serial_Printf(char *format, ...);
+void Serial_Init_For_DeBug(void);/*仅调试使用！*/
+
 
 uint8_t Serial_GetRxFlag(void);
 uint8_t Serial_GetRxData(void);

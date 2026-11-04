@@ -60,14 +60,14 @@ void imu963ra_gpio_init(void)
     GPIO_InitTypeDef gpio;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
     IMU963RA_CS(1); /* ��Ԥ�����������������ģʽ������CS���������� */
-    GPIO_ResetBits(MIU963RA_SCK_PORT, IMU963RA_SPC_PIN);
+    GPIO_ResetBits(IMU963RA_SCK_PORT, IMU963RA_SPC_PIN);
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     gpio.GPIO_Pin = IMU963RA_CS_PIN;
     gpio.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_Init(IMU963RA_CS_PORT, &gpio);
     gpio.GPIO_Pin = IMU963RA_SPC_PIN;
     gpio.GPIO_Mode = GPIO_Mode_AF_PP;
-    GPIO_Init(MIU963RA_SCK_PORT, &gpio);
+    GPIO_Init(IMU963RA_SCK_PORT, &gpio);
     gpio.GPIO_Pin = IMU963RA_SDI_PIN;
     GPIO_Init(MIU963RA_SDI_PORT, &gpio);
     gpio.GPIO_Pin = IMU963RA_SDO_PIN;

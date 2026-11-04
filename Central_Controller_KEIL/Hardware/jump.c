@@ -1,6 +1,7 @@
 #include "jump.h"
 #include "leg_ik.h"
 #include "servo.h"
+#include "zf_device_imu963ra.h"
 
 extern LegIK_Geometry My_LegIK_Geometry;
 extern float current_leg_x[2], current_leg_height[2];
@@ -56,7 +57,8 @@ int8_t Jump_Start(uint32_t now_ms)
     if (Robot_State != ROBOT_NORMAL) return JUMP_RUNNING;
     if (!(JUMP_LOW_MM > 0 && JUMP_LOW_MM < JUMP_MID_MM && JUMP_MID_MM < JUMP_HIGH_MM) ||
         !isfinite(JUMP_BUFFER_STEP_MM) || JUMP_BUFFER_STEP_MM <= 0 ||
-        JUMP_SAMPLE_MS == 0 || JUMP_AIR_SAMPLES == 0 || JUMP_LAND_SAMPLES == 0)
+        JUMP_SAMPLE_MS == 0 || JUMP_BUFFER_PERIOD_MS == 0 ||
+        JUMP_AIR_SAMPLES == 0 || JUMP_LAND_SAMPLES == 0)
         return JUMP_ERROR;
     for (i = 0; i < 2; ++i) {
         if (!(current_leg_x[i] >= FOOT_X_MIN_MM && current_leg_x[i] <= FOOT_X_MAX_MM &&
@@ -79,23 +81,37 @@ int8_t Jump_Start(uint32_t now_ms)
     return MoveTo(low_mean, 1, ROBOT_JUMP_SQUAT, now_ms);/*这里更改了Robot_State*/
 }
 
-int8_t Jump_Update(uint32_t now_ms, float accel_g)
+int8_t Jump_Update(uint32_t now_ms)
 {
     uint32_t gap = (uint32_t)(now_ms - sampled);
     uint32_t elapsed = (uint32_t)(now_ms - phase_time);/*不同阶段相隔的时间*/
+    float accel_g = 0.0f;
+    uint8_t have_sample = 0; /* 仅本次调用有效；同一个样本不能反复累计 */
 
     if (Robot_State == ROBOT_NORMAL) return JUMP_IDLE;
     if (Robot_State == ROBOT_FAULT) return JUMP_ERROR;
 
-    if (!isfinite(accel_g) || accel_g < 0) return Fault();
     if (Robot_State <= ROBOT_JUMP_LAND &&
         (uint32_t)(now_ms - started) >= JUMP_TIMEOUT_MS) return Fault();/*跳跃执行全过程超时*/
 
 
-    /* count只表示连续样本数；缓冲同样每个采样周期最多走一步。 */
-    if (gap < JUMP_SAMPLE_MS) return JUMP_RUNNING;
-    if (gap > 2u * JUMP_SAMPLE_MS) count = 0;
-    sampled = now_ms;
+    /* 采样限速只限制加速度检测，不能提前return屏蔽整个状态机。
+     * 下蹲/收放腿等待/恢复直接检查now_ms，避免被20ms采样周期取整。 */
+    if (((Robot_State == ROBOT_JUMP_PUSH && elapsed >= JUMP_PUSH_MIN_MS) ||
+         ((Robot_State == ROBOT_JUMP_RETRACT || Robot_State == ROBOT_JUMP_LAND) &&
+          elapsed >= JUMP_LAND_BLANK_MS)) && gap >= JUMP_SAMPLE_MS) {
+        float ax, ay, az;
+        imu963ra_get_acc();
+        if (imu963ra_spi_error) return Fault();
+        ax = imu963ra_acc_transition(imu963ra_acc_x);
+        ay = imu963ra_acc_transition(imu963ra_acc_y);
+        az = imu963ra_acc_transition(imu963ra_acc_z);
+        accel_g = sqrtf(ax*ax + ay*ay + az*az);
+        if (!isfinite(accel_g)) return Fault();
+        if (gap > 2u * JUMP_SAMPLE_MS) count = 0;
+        sampled = now_ms;
+        have_sample = 1;
+    }
 
     switch (Robot_State) {
     case ROBOT_JUMP_SQUAT:
@@ -103,14 +119,14 @@ int8_t Jump_Update(uint32_t now_ms, float accel_g)
             return MoveTo(high_mean, 1, ROBOT_JUMP_PUSH, now_ms);
         break;
     case ROBOT_JUMP_PUSH:
-        if (elapsed < JUMP_PUSH_MIN_MS) break;/*这里主要是保障舵机能完全蹬地发力，是等待舵机响应到位的*/
+        if (!have_sample) break; /* 最短蹬伸等待结束后，只累计新采集的样本 */
         count = accel_g < JUMP_AIR_G ? count + 1u : 0;
         if (count >= JUMP_AIR_SAMPLES)
             return MoveTo(low_mean, 1, ROBOT_JUMP_RETRACT, now_ms);/*已经满足腾空了，立马收腿*/
         break;
     case ROBOT_JUMP_RETRACT:
     case ROBOT_JUMP_LAND:
-        if (elapsed >= JUMP_LAND_BLANK_MS) {
+        if (have_sample) {
             count = accel_g > JUMP_LAND_G ? count + 1u : 0;
             if (count >= JUMP_LAND_SAMPLES) {
                 Robot_State = Robot_State == ROBOT_JUMP_RETRACT ?
@@ -125,7 +141,9 @@ int8_t Jump_Update(uint32_t now_ms, float accel_g)
             return MoveTo(JUMP_MID_MM, 1, ROBOT_JUMP_LAND, now_ms);
         break;
     case ROBOT_JUMP_BUFFER: {
-        float mean = (current_leg_height[0] + current_leg_height[1]) * 0.5f;
+        float mean;
+        if (elapsed < JUMP_BUFFER_PERIOD_MS) break; /* 每轮调用也不能连续缩腿 */
+        mean = (current_leg_height[0] + current_leg_height[1]) * 0.5f;
         mean = fmaxf(low_mean, mean - JUMP_BUFFER_STEP_MM);
         return MoveTo(mean, 0, mean <= low_mean ? ROBOT_JUMP_LOW_HOLD : ROBOT_JUMP_BUFFER, now_ms);
     }

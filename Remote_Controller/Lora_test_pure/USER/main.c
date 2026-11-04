@@ -1,0 +1,27 @@
+#include "sys.h"
+#include "delay.h"
+#include "usart.h"
+#include "led.h"
+#include "beep.h"
+#include "key.h"
+
+int main(void)
+{ 
+ 
+
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);//设置系统中断优先级分组2
+	delay_init(168);		//延时初始化 
+	uart_init(115200);	//串口初始化波特率为9600
+	LED_Init();		//初始化与LED连接的硬件接口
+	while(1)
+	{
+		GPIO_ResetBits(GPIOF,GPIO_Pin_9);  //LED0???????GPIOF.9???????  ???LED0=0;
+		GPIO_SetBits(GPIOF,GPIO_Pin_10);   //LED1???????GPIOF.10??????? ???LED1=1;
+		delay_ms(500);  		   //???300ms
+		GPIO_SetBits(GPIOF,GPIO_Pin_9);	   //LED0???????GPIOF.0???????  ???LED0=1;
+		GPIO_ResetBits(GPIOF,GPIO_Pin_10); //LED1???????GPIOF.10??????? ???LED1=0;
+		delay_ms(500);                     //???300ms
+		printf("a\r\n");
+	}
+}
+

@@ -13,8 +13,11 @@
 #include "jump.h"
 
 #define IMU_PERIOD_MS  1u       /* TIM2时基，单位ms */
-#define IMU_UPDATE_DIVIDER_PID 20u  /* 每50次中断解算一次：当前实际周期50ms ,这个是PID特供*/
-#define IMU_UPDATE_DIVIDER_JUMP 20u  /* 每20次中断检查一次Jump：当前实际周期20ms ,这个是Jump特供*/
+#define IMU_ATTITUDE_PERIOD_MS 50u /* 完整姿态采样/解算周期，独立于FOOT_PID_PERIOD_MS */
+#define IMU_CYCLE_NOW (*(volatile uint32_t *)0xE0001004u) /* DWT周期计数，不清零 */
+#if FOOT_PID_PERIOD_MS < 1u || IMU_ATTITUDE_PERIOD_MS < 1u
+#error Control_period_must_be_positive
+#endif
 
 #if IMU_PERIOD_MS < 1u || IMU_PERIOD_MS > 50u
 #error IMU_PERIOD_MS_must_be_1_to_50
@@ -39,7 +42,7 @@ float imu963ra_mag_x_transition,  imu963ra_mag_y_transition,  imu963ra_mag_z_tra
 extern volatile uint8_t if_We_Should_Infrom_Main_Function_to_PID;/*定时器触发发送消息到驱动后，驱动立刻回传轮子转速数值，之后进入主控进行PID得到对应的目标Pitch，再把目标角度回传回去，给驱动做PID*/
 extern volatile uint32_t CAN_Time_Out_Counter;/*CAN超时计数器*/
 
-#define Formal 3
+#define Formal 4
 #define Central_Driver 1
 
 
@@ -48,7 +51,7 @@ float angle[3];                      /* Pitch、Yaw、Roll，度；仅主循环�
 volatile float Speed[2]={0};//双轮转速,单位是：rpm
 /* TIM2累计毫秒，可自然回绕；跳跃按无符号差值计时，不清零这个公共时钟。 */
 static volatile uint32_t control_time_ms;/*一个全局时钟，允许回绕。。*/
-volatile uint8_t flag_to_update_PID=0,flag_to_update_Jump=0,PID_and_Transfer_Data=0;/*到时间就发送角度*/
+volatile uint8_t flag_to_update_PID=0, flag_to_update_Attitude=0;/* 普通控制和姿态的独立通知 */
 /* 初始目标采用合法工作区内的宏；首次下发成功后表示最近一次指令位置。 */
  float current_leg_height[2]={FOOT_INITIAL_Y_MM, FOOT_INITIAL_Y_MM};/*足端Y位置初始化*/
  float current_leg_x[2]={FOOT_INITIAL_X_MM, FOOT_INITIAL_X_MM};/*足端X位置初始化*/
@@ -89,7 +92,7 @@ static void IMU_TimerInit(void)
     TIM_TimeBaseInit(TIM2, &timer);
     TIM_ClearITPendingBit(TIM2, TIM_IT_Update); /* 清除初始化UG产生的UIF */
     flag_to_update_PID = 0;
-    flag_to_update_Jump = 0;
+    flag_to_update_Attitude = 0;
     /* Serial_Init已设置分组2，TIM2优先于USART1接收中断。 */
     nvic.NVIC_IRQChannel = TIM2_IRQn;
     nvic.NVIC_IRQChannelPreemptionPriority = 0;
@@ -99,21 +102,20 @@ static void IMU_TimerInit(void)
     TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
     TIM_Cmd(TIM2, DISABLE);
 }
-uint16_t inner_counter_PID=0;/*软件分频器_PID专供*/
-uint16_t inner_counter_Jump=0;/*软件分频器_Jump专供*/
+uint32_t inner_counter_PID=0, inner_counter_Attitude=0;/* 各自累计毫秒 */
 void TIM2_IRQHandler(void)
 {
     if (TIM_GetITStatus(TIM2, TIM_IT_Update) == SET) {
         TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
         control_time_ms += IMU_PERIOD_MS;
-        inner_counter_PID++;
-        inner_counter_Jump++;
-        if(inner_counter_Jump>=IMU_UPDATE_DIVIDER_JUMP)
+        inner_counter_PID += IMU_PERIOD_MS;
+        inner_counter_Attitude += IMU_PERIOD_MS;
+        if(inner_counter_Attitude>=IMU_ATTITUDE_PERIOD_MS)
         {
-            inner_counter_Jump=0;
-            flag_to_update_Jump = 1;
+            inner_counter_Attitude=0;
+            flag_to_update_Attitude = 1;
         }
-        if(inner_counter_PID>=IMU_UPDATE_DIVIDER_PID)
+        if(inner_counter_PID>=FOOT_PID_PERIOD_MS)
         {
             inner_counter_PID=0;
             flag_to_update_PID = 1;
@@ -157,10 +159,12 @@ static float Read_Acceleration(void)
                  imu963ra_acc_z_transition*imu963ra_acc_z_transition);
 }
 
-uint32_t last_sampled_ms = 0; /* 同一采样时刻同时用于dt及下次基准 */
+uint32_t last_sampled_cycles = 0; /* 单位CPU周期；必须与DWT快照相减 */
 static void Read_Attitude(void)
 {
+    uint32_t sampled_cycles, elapsed_cycles;
     uint8_t use_acc = Robot_State == ROBOT_NORMAL; /* 跳跃冲击/失重时不用加速度修正倾角。 */
+    if (use_acc) (void)Read_Acceleration(); /* 跳跃加速度由Jump_Update独立采集 */
     imu963ra_get_gyro();
     imu963ra_get_mag();
     if (imu963ra_spi_error) Control_Fault("IMU SPI error");
@@ -171,18 +175,18 @@ static void Read_Attitude(void)
     imu963ra_mag_y_transition = imu963ra_mag_transition(imu963ra_mag_y);
     imu963ra_mag_z_transition = imu963ra_mag_transition(imu963ra_mag_z);
 
-
-
+    sampled_cycles = IMU_CYCLE_NOW;
+    elapsed_cycles = (uint32_t)(sampled_cycles - last_sampled_cycles);
+    last_sampled_cycles = sampled_cycles; /* 同一次快照作下次基准，计入本轮解算耗时 */
     if (!IMU_9Axis_Gyro_Acc_Mag(
             use_acc ? imu963ra_acc_x_transition : 0.0f,
             use_acc ? imu963ra_acc_y_transition : 0.0f,
             use_acc ? imu963ra_acc_z_transition : 0.0f,
             imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition,
             imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition,
-            &angle[0], &angle[2], &angle[1], ((*(volatile uint32_t *)0xE0001004u-last_sampled_ms)/72)*0.000001f))
+            &angle[0], &angle[2], &angle[1], (float)elapsed_cycles / (float)SystemCoreClock))
         Control_Fault("IMU attitude invalid");
 
-        last_sampled_ms=*(volatile uint32_t *)0xE0001004u;/*记录上一次计算的时间*/
 }
 
 static void Resume_Control(void)
@@ -202,6 +206,7 @@ static void Resume_Control(void)
 #if (Formal==1)
 int main(void)
 {
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);/*上位机一定要设置为优先级4，FreeRTOS的普通要求*/
     Servo_Init(SERVO_PERIOD_US);
     Leg_ResetFootPositionHistory();
     Serial_Init();
@@ -213,10 +218,12 @@ int main(void)
     FootPID_Init(&Foot_PID);
     if (Leg_SetFootPositions(current_leg_x, current_leg_height) != LEG_IK_OK)
         Control_Fault("Initial foot position rejected");
+    last_sampled_cycles = IMU_CYCLE_NOW; /* 预热结束后建立DWT基准，不能使用毫秒时钟 */
+    flag_to_update_Attitude = 1; /* 第一次普通控制前先取得姿态 */
     TIM_Cmd(TIM2,ENABLE);
-    last_sampled_ms=control_time_ms;/*记录上一次计算的时间*/
     while (1) {
-        float wheels[2], next_x[2], next_y[2], accel_g;
+        float wheels[2], next_x[2], next_y[2];
+        uint8_t pid_due, attitude_due;
 
         if(Serial_ProcessControl()) /* 接收遥控目标，保持PID和跳跃在主循环执行 */
             Serial_SendFeedback((Speed[0]+Speed[1])/2,angle[1]);
@@ -225,16 +232,15 @@ int main(void)
             Control_Fault("CAN Time Out");
 
         
-        if (!flag_to_update_PID && !flag_to_update_Jump) continue;
-        if(flag_to_update_PID)
-            PID_and_Transfer_Data=1;
+        /* 读取通知和清零一起保护；跳跃不受这两个通知限制。 */
         NVIC_DisableIRQ(TIM2_IRQn);
+        pid_due = flag_to_update_PID;
+        attitude_due = flag_to_update_Attitude;
         flag_to_update_PID = 0;
-        flag_to_update_Jump = 0;
+        flag_to_update_Attitude = 0;
         NVIC_EnableIRQ(TIM2_IRQn);
 
-        accel_g = Read_Acceleration();
-        Read_Attitude(); /* 普通运行和跳跃都每周期解算，跳跃只跳过下面的PID/CAN控制帧。 */
+        if (attitude_due) Read_Attitude(); /* 普通运行/跳跃都独立按50ms解算 */
         if (Jump_Request) {
             Jump_Request = 0; /* 跳跃中再次请求直接消费，不重新启动 */
             if (Robot_State == ROBOT_NORMAL) {
@@ -249,14 +255,12 @@ int main(void)
             }
         }
         if (Robot_State != ROBOT_NORMAL) {
-            int8_t result = Jump_Update(control_time_ms, accel_g);
+            int8_t result = Jump_Update(control_time_ms); /* 每轮检查1ms时钟，内部按需采集加速度 */
             if (result == JUMP_ERROR) Control_Fault("Jump failed");
             if (result == JUMP_LANDED) Resume_Control();
-            continue; /* 跳跃只运行姿态解算和跳跃状态机，不运行PID或周期CAN收发。  这个continue也会彻底屏蔽掉信息发送
-            这里的代码顺序是绝对不能更改的！！！靠的就是这个continue的屏蔽作用！！ */
+            continue; /* 必须位于普通CAN/PID之前：跳跃期间屏蔽下面的控制帧和PID。 */
         }
-        if(PID_and_Transfer_Data) {
-            PID_and_Transfer_Data=0;
+        if(pid_due) { /* 跳跃期间的PID通知已消费，不积压到恢复后 */
             while (!CAN_Angle_and_LegHeight_Send_First_Package(
                     angle[0], angle[1], current_leg_height[0], current_leg_height[1]))
                 if (CAN_Time_Out_Counter > 3) Control_Fault("CAN Time Out");
@@ -320,7 +324,7 @@ static void Calibrate_Magnetometer(void)
 int main(void)
 {
     
-    uint32_t now_ms=0;
+    /* 姿态积分统一使用DWT周期差。 */
 
 //	Servo_Init(SERVO_PERIOD_US); /* TIM3: no pulses until Servo_SetPulse/Servo_SetAngle. */
 	Serial_Init();/*来个串口，我板子上应该花了接口，先打开*/
@@ -333,18 +337,19 @@ int main(void)
     Delay_s(5);/*先等待一下*/
     Calibrate_Magnetometer();
 
+    last_sampled_cycles = IMU_CYCLE_NOW;
 		TIM_Cmd(TIM2, ENABLE);
     while (1) {
         //Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
-				if(flag_to_update_PID==1)
+				if(flag_to_update_Attitude==1)
 				{
-					flag_to_update_PID=0;
+					flag_to_update_Attitude=0;
 					
 					imu963ra_get_acc();
 					imu963ra_get_gyro();
 					imu963ra_get_mag();
                     if (imu963ra_spi_error) Control_Fault("IMU SPI error");
-                    uint32_t sampled_ms = control_time_ms; /* 同一采样时刻同时用于dt及下次基准 */
+                    uint32_t sampled_cycles = IMU_CYCLE_NOW; /* 同一次DWT快照用于差值和下次基准 */
 					if(!flag_filter_run)
 					{
 						imu963ra_acc_x_out=imu963ra_acc_x;
@@ -366,7 +371,7 @@ int main(void)
                                 imu963ra_mag_transition(imu963ra_mag_z_out),
                                 &angle[2], &angle[0], &angle[1])) continue;
 						flag_filter_run=1;
-                        now_ms = sampled_ms;
+                        last_sampled_cycles = sampled_cycles;
                         continue;
 					}
 					imu963ra_acc_x_out+=alpha_for_acc*(imu963ra_acc_x-imu963ra_acc_x_out);
@@ -392,12 +397,12 @@ int main(void)
 					imu963ra_mag_z_transition=imu963ra_mag_transition(imu963ra_mag_z_out);
 
                     						
-                    uint32_t record_time = sampled_ms - now_ms;
-                    now_ms = sampled_ms;
+                    uint32_t record_time = (uint32_t)(sampled_cycles - last_sampled_cycles);
+                    last_sampled_cycles = sampled_cycles;
 					if (!IMU_9Axis_Gyro_Acc_Mag(imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition, 
 					imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition, 
 					imu963ra_mag_x_transition, imu963ra_mag_y_transition, imu963ra_mag_z_transition, 
-					&angle[0], &angle[2], &angle[1], record_time*0.001f))
+					&angle[0], &angle[2], &angle[1], (float)record_time / (float)SystemCoreClock))
                         Control_Fault("IMU attitude invalid");
                  //   printf("%ld,%f,%f,%f\n",record_time,angle[0],angle[1],angle[2]);
 				 //	printf("%d,%d,%d,%d,%d,%d\n",imu963ra_gyro_x_out,imu963ra_gyro_y_out,imu963ra_gyro_z_out,imu963ra_gyro_x,imu963ra_gyro_y,imu963ra_gyro_z);				
@@ -438,12 +443,12 @@ int main(void)
    // Calibrate_Magnetometer();
 
 	TIM_Cmd(TIM2, ENABLE);
-    last_sampled_ms=*(volatile uint32_t *)0xE0001004u;
+    last_sampled_cycles = IMU_CYCLE_NOW;
     while (1) {
         //Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
-				if(flag_to_update_PID==1)
+				if(flag_to_update_Attitude==1)
 				{
-					flag_to_update_PID=0;
+					flag_to_update_Attitude=0;
 					
 					imu963ra_get_acc();
 					imu963ra_get_gyro();
@@ -481,19 +486,21 @@ int main(void)
 					imu963ra_gyro_y_transition=imu963ra_gyro_transition(imu963ra_gyro_y_out);
 					imu963ra_gyro_z_transition=imu963ra_gyro_transition(imu963ra_gyro_z_out);
 
-                    uint32_t record_time = *(volatile uint32_t *)0xE0001004u - last_sampled_ms;
+                    uint32_t sampled_cycles = IMU_CYCLE_NOW;
+                    uint32_t record_time = (uint32_t)(sampled_cycles - last_sampled_cycles);
+                    last_sampled_cycles = sampled_cycles;
 
 					IMU_6Axis_Gyro_Acc(imu963ra_acc_x_transition, imu963ra_acc_y_transition, imu963ra_acc_z_transition, 
 					imu963ra_gyro_x_transition, imu963ra_gyro_y_transition, imu963ra_gyro_z_transition,  
-					&angle[0], &angle[2], &angle[1], record_time/72*0.000001f);
+					&angle[0], &angle[2], &angle[1], (float)record_time / (float)SystemCoreClock);
                     
-                    last_sampled_ms=*(volatile uint32_t *)0xE0001004u;
+
                  //   printf("%ld,%f,%f,%f\n",record_time,angle[0],angle[1],angle[2]);
 				 //	printf("%d,%d,%d,%d,%d,%d\n",imu963ra_gyro_x_out,imu963ra_gyro_y_out,imu963ra_gyro_z_out,imu963ra_gyro_x,imu963ra_gyro_y,imu963ra_gyro_z);				
                 //  printf("%d,%d,%d,%d,%d,%d\n",imu963ra_mag_x_out,imu963ra_mag_y_out,imu963ra_mag_z_out,imu963ra_mag_x,imu963ra_mag_y,imu963ra_mag_z);				
                     /* 最后三列仍是滤波后的原始计数；第4列为校准+倾斜补偿后的磁航向。 */
 					static float sum=0;
-					sum+=record_time/72.0f/1000.0f;
+					sum += (float)record_time * 1000.0f / (float)SystemCoreClock;
                     printf("%f,%.2f\n",sum/1000,angle[1]-(-4E-07 *(sum/1000)*(sum/1000)*(sum/1000) + 0.0002*(sum/1000)*(sum/1000) - 0.0437*(sum/1000) + 0.3289));                     
 				}
 //					Delay_ms(IMU_PERIOD_MS);
@@ -502,4 +509,24 @@ int main(void)
 
     }
 }
+#elif (Formal==4) /*调试用，Lora模块传输测试*/
+extern volatile uint8_t Serial_RxData;
+extern volatile uint8_t Serial_RxFlag;
+int main(void)
+{
+    NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+		Serial_Init_For_DeBug();/*来个串口，我板子上应该花了接口，先打开*/
+		Serial_Init();
+    last_sampled_cycles=*(volatile uint32_t *)0xE0001004u;
+    while (1) {
+        //Serial_ProcessControl(); /* 调试模式也可接收，printf照常使用 */
+        if(Serial_RxFlag)
+        {
+            Serial_RxFlag=0;/*清空标志位*/
+            printf("time(us):%.2f,data:0x%02X\n",(*(volatile uint32_t *)0xE0001004u- last_sampled_cycles)/72.0f,Serial_RxData);
+            last_sampled_cycles=*(volatile uint32_t *)0xE0001004u;
+        }
+    }
+}
+
 #endif 

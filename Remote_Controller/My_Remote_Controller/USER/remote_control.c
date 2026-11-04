@@ -23,7 +23,7 @@ static uint8_t manual_mode; /* 只控制遥控页的10秒掉线检测，不影�
 
 void RemoteControl_ResetRx(void)
 {
-    feedback_count = 0u;
+    feedback_count = 0u;/*该变量用于记录接收缓冲区的当前“指针”位置*/
 }
 
 void RemoteControl_ReceiveByte(uint8_t byte)
@@ -40,7 +40,7 @@ void RemoteControl_ReceiveByte(uint8_t byte)
         received_speed = (int16_t)((uint16_t)feedback_frame[2] |
                                   ((uint16_t)feedback_frame[3] << 8));
         received_yaw = yaw;
-        Lora_LastRxCycles = DWT->CYCCNT;
+        Lora_LastRxCycles = DWT->CYCCNT;/*接收到一帧数据就刷新一下时间戳*/
         Lora_RxPending = 1u;
         feedback_count = 0u;
         return;
@@ -50,7 +50,7 @@ void RemoteControl_ReceiveByte(uint8_t byte)
         feedback_frame[i - 1u] = feedback_frame[i];
     feedback_count = REMOTE_FEEDBACK_SIZE - 1u;
 }
-
+/*把degrees规范到[-180, 180) */
 static float WrapYaw(float degrees)
 {
     float result = fmodf(degrees + 180.0f, 360.0f);
@@ -71,7 +71,7 @@ void RemoteControl_Init(void)
     manual_mode = 0u;
     waiting_response = 0u;
     command.speed_mps = 0.0f;
-    command.yaw_deg = WrapYaw(REMOTE_YAW_OFFSET_DEG);
+    command.yaw_deg = WrapYaw(REMOTE_YAW_OFFSET_DEG);/*这个REMOTE_YAW_OFFSET_DEG本质就是一个初始角度*/
     command.jump = 0u;
     jump_frames = 0u;
     last_send_ms = 0u;
