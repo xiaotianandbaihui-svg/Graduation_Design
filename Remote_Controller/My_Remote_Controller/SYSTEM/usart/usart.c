@@ -1,41 +1,13 @@
 #include "sys.h"
 #include "remote_control.h"
 #include "usart.h"	
-////////////////////////////////////////////////////////////////////////////////// 	 
-//如果使用ucos,则包括下面的头文件即可.
+
 #if SYSTEM_SUPPORT_OS
-#include "FreeRTOS.h"					//ucos 使用	  
+#include "FreeRTOS.h"					// 使用FreeRTOS
 #endif
-//////////////////////////////////////////////////////////////////////////////////	 
-//本程序只供学习使用，未经作者许可，不得用于其它任何用途
-//ALIENTEK STM32F4探索者开发板
-//串口1初始化		   
-//正点原子@ALIENTEK
-//技术论坛:www.openedv.com
-//修改日期:2014/6/10
-//版本：V1.5
-//版权所有，盗版必究。
-//Copyright(C) 广州市星翼电子科技有限公司 2009-2019
-//All rights reserved
-//********************************************************************************
-//V1.3修改说明 
-//支持适应不同频率下的串口波特率设置.
-//加入了对printf的支持
-//增加了串口接收命令功能.
-//修正了printf第一个字符丢失的bug
-//V1.4修改说明
-//1,修改串口初始化IO的bug
-//2,修改了USART_RX_STA,使得串口最大接收字节数为2的14次方
-//3,增加了USART_REC_LEN,用于定义串口最大允许接收的字节数(不大于2的14次方)
-//4,修改了EN_USART1_RX的使能方式
-//V1.5修改说明
-//1,增加了对UCOSII的支持
-////////////////////////////////////////////////////////////////////////////////// 	  
+
 #include "task.h"
  
-
-//////////////////////////////////////////////////////////////////
-//加入以下代码,支持printf函数,而不需要选择use MicroLIB	  
 #if 1
 #pragma import(__use_no_semihosting)             
 //标准库需要的支持函数                 
@@ -72,8 +44,8 @@ void uart_init(u32 bound){
 	NVIC_InitTypeDef NVIC_InitStructure;
 	
     /* DWT供串口发送及LoRa收发超时计时，不依赖delay_init，也不清零公共计数器。 */
-    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
-    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;/*打开DWT定时器*/
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;/*设置为向上计数*/
 
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA,ENABLE); //使能GPIOA时钟
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1,ENABLE);//使能USART1时钟
@@ -119,6 +91,11 @@ void uart_init(u32 bound){
 
 
 /* ISR只校验并缓存完整回传；控制目标和界面仍由GUI任务处理。 */
+/*
+*这里我再提一嘴，32的串口，先写SR再读DR就可以由硬件自动清除全部标志位；
+*RE / NE / FE / PE：只读（r）。写 SR 对它们无效，SR &= ~USART_SR_ORE 之类的写法什么都不会发生。
+RXNE、TC、LBD、CTS：rc_w0，写 0 可清。
+*/
 void USART1_IRQHandler(void)
 {
     u8 byte;
@@ -127,7 +104,7 @@ void USART1_IRQHandler(void)
         return;
     byte = (u8)USART1->DR; /* 先读SR再读DR，清接收/错误状态 */
     if (status & (USART_SR_ORE | USART_SR_NE | USART_SR_FE | USART_SR_PE)) {
-        RemoteControl_ResetRx();
+        RemoteControl_ResetRx();/*只要有错误帧出现，直接丢弃这一包数据，并且从头开始接收*/
         return;
     }
     RemoteControl_ReceiveByte(byte);

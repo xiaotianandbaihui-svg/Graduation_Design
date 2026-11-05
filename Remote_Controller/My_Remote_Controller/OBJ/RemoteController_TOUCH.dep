@@ -49,7 +49,7 @@ I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x6ADC0958)
 I (..\FreeRTOS\include\mpu_wrappers.h)(0x6ADC0958)
 I (..\FreeRTOS\include\task.h)(0x6ADC0958)
 I (..\FreeRTOS\include\list.h)(0x6ADC0958)
-I (remote_control.h)(0x6AE4065E)
+I (remote_control.h)(0x6AEB267D)
 I (app_tasks.h)(0x6AE4065E)
 F (.\stm32f4xx_it.c)(0x6ADC095A)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\stm32f4xx_it.o --omf_browse ..\obj\stm32f4xx_it.crf --depend ..\obj\stm32f4xx_it.d)
 I (stm32f4xx_it.h)(0x6ADC095A)
@@ -138,7 +138,7 @@ I (..\FreeRTOS\include\mpu_wrappers.h)(0x6ADC0958)
 I (task_config.h)(0x6AE4131F)
 I (..\FreeRTOS\include\task.h)(0x6ADC0958)
 I (..\FreeRTOS\include\list.h)(0x6ADC0958)
-I (remote_control.h)(0x6AE4065E)
+I (remote_control.h)(0x6AEB267D)
 I (remote_ui.h)(0x6AE1E408)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting\lv_port_disp_template.h)(0x6AE1BB7F)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl/lvgl.h)(0x6ADC0958)
@@ -278,8 +278,8 @@ I (..\FreeRTOS\include\task.h)(0x6ADC0958)
 I (..\FreeRTOS\include\list.h)(0x6ADC0958)
 I (app_tasks.h)(0x6AE4065E)
 F (.\task_config.h)(0x6AE4131F)()
-F (.\remote_control.c)(0x6AE4065E)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\remote_control.o --omf_browse ..\obj\remote_control.crf --depend ..\obj\remote_control.d)
-I (remote_control.h)(0x6AE4065E)
+F (.\remote_control.c)(0x6AEB267D)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\remote_control.o --omf_browse ..\obj\remote_control.crf --depend ..\obj\remote_control.d)
+I (remote_control.h)(0x6AEB267D)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
 I (..\SYSTEM\usart\usart.h)(0x6AE1BB7F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
@@ -328,7 +328,7 @@ I (..\FreeRTOS\portable\RVDS\ARM_CM4F\portmacro.h)(0x6ADC0958)
 I (..\FreeRTOS\include\mpu_wrappers.h)(0x6ADC0958)
 I (..\FreeRTOS\include\task.h)(0x6ADC0958)
 I (..\FreeRTOS\include\list.h)(0x6ADC0958)
-F (.\remote_control.h)(0x6AE4065E)()
+F (.\remote_control.h)(0x6AEB267D)()
 F (.\remote_dashboard.c)(0x6AE44F40)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\remote_dashboard.o --omf_browse ..\obj\remote_dashboard.crf --depend ..\obj\remote_dashboard.d)
 I (remote_dashboard.h)(0x6AE44F40)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\lvgl.h)(0x6ADC0958)
@@ -453,14 +453,14 @@ I (..\MIDDLEWARE\LVGL\GUI\lvgl\src/extra/libs/sjpg/lv_sjpg.h)(0x6ADC0958)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\src/extra/libs/freetype/lv_freetype.h)(0x6ADC0958)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\src/extra/libs/rlottie/lv_rlottie.h)(0x6ADC0958)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\src/extra/libs/ffmpeg/lv_ffmpeg.h)(0x6ADC0958)
-I (remote_control.h)(0x6AE4065E)
+I (remote_control.h)(0x6AEB267D)
 I (remote_font.h)(0x6AE44F40)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\limits.h)(0x5CEB79D6)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\math.h)(0x5CEB79D6)
 F (.\remote_dashboard.h)(0x6AE44F40)()
 F (.\remote_ui.c)(0x6AE44F40)(--c99 -c --cpu Cortex-M4.fp.sp -g -O0 --apcs=interwork -I ..\CORE -I ..\SYSTEM\delay -I ..\SYSTEM\sys -I ..\SYSTEM\usart -I ..\USER -I ..\HARDWARE\LED -I ..\HARDWARE\LCD -I ..\HARDWARE\KEY -I ..\HARDWARE\IIC -I ..\HARDWARE\24CXX -I ..\FWLIB\inc -I ..\HARDWARE\TOUCH -I ..\FreeRTOS\include -I ..\FreeRTOS\portable\RVDS\ARM_CM4F -I ..\FreeRTOS -I ..\MIDDLEWARE -I ..\MIDDLEWARE\LVGL\GUI -I ..\MIDDLEWARE\LVGL\GUI\lvgl -I ..\MIDDLEWARE\LVGL\GUI\lvgl\src -I ..\MIDDLEWARE\LVGL\GUI\lvgl\examples\porting-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Drivers\CMSIS\Device\ST\STM32F4xx\Include-ID:\My_Keil\Keil_v5\Packs\Keil\STM32F4xx_DFP\2.17.1\Device\Include-D__UVISION_VERSION="539" -DSTM32F407xx -DSTM32F40_41xxx -DUSE_STDPERIPH_DRIVER-o ..\obj\remote_ui.o --omf_browse ..\obj\remote_ui.crf --depend ..\obj\remote_ui.d)
 I (remote_ui.h)(0x6AE1E408)
-I (remote_control.h)(0x6AE4065E)
+I (remote_control.h)(0x6AEB267D)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdint.h)(0x5CEB79E2)
 I (remote_font.h)(0x6AE44F40)
 I (..\MIDDLEWARE\LVGL\GUI\lvgl\lvgl.h)(0x6ADC0958)
@@ -1247,7 +1247,7 @@ I (..\FWLIB\inc\stm32f4xx_can.h)(0x6ADC0958)
 I (..\FWLIB\inc\stm32f4xx_dac.h)(0x6ADC0958)
 I (..\FWLIB\inc\stm32f4xx_dcmi.h)(0x6ADC0958)
 I (..\FWLIB\inc\stm32f4xx_fsmc.h)(0x6ADC0958)
-I (..\USER\remote_control.h)(0x6AE4065E)
+I (..\USER\remote_control.h)(0x6AEB267D)
 I (..\SYSTEM\usart\usart.h)(0x6AE1BB7F)
 I (D:\My_Keil\Keil_v5\ARM\ARMCC\include\stdio.h)(0x5CEB79E2)
 I (..\FreeRTOS\include\FreeRTOS.h)(0x6ADC0958)

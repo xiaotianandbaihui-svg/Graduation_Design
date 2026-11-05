@@ -13,7 +13,7 @@
 #include "jump.h"
 
 #define IMU_PERIOD_MS  1u       /* TIM2时基，单位ms */
-#define IMU_ATTITUDE_PERIOD_MS 50u /* 完整姿态采样/解算周期，独立于FOOT_PID_PERIOD_MS */
+#define IMU_ATTITUDE_PERIOD_MS 20u /* 完整姿态采样/解算周期，独立于FOOT_PID_PERIOD_MS，这里我们只是给的一样，但是完全可以不一样 */
 #define IMU_CYCLE_NOW (*(volatile uint32_t *)0xE0001004u) /* DWT周期计数，不清零 */
 #if FOOT_PID_PERIOD_MS < 1u || IMU_ATTITUDE_PERIOD_MS < 1u
 #error Control_period_must_be_positive
@@ -146,7 +146,7 @@ static void Drive_SetMode(uint8_t mode)
     if_We_Should_Infrom_Main_Function_to_PID = 0;
     CAN_Time_Out_Counter = 0;
 }
-
+/*读取加速度*/
 static float Read_Acceleration(void)
 {
     imu963ra_get_acc();
@@ -240,7 +240,7 @@ int main(void)
         flag_to_update_Attitude = 0;
         NVIC_EnableIRQ(TIM2_IRQn);
 
-        if (attitude_due) Read_Attitude(); /* 普通运行/跳跃都独立按50ms解算 */
+        if (attitude_due) Read_Attitude(); /* 普通运行/跳跃都独立按宏所定义时间解算，这里读取更新时间到了，更新角度！ */
         if (Jump_Request) {
             Jump_Request = 0; /* 跳跃中再次请求直接消费，不重新启动 */
             if (Robot_State == ROBOT_NORMAL) {
@@ -256,8 +256,8 @@ int main(void)
         }
         if (Robot_State != ROBOT_NORMAL) {
             int8_t result = Jump_Update(control_time_ms); /* 每轮检查1ms时钟，内部按需采集加速度 */
-            if (result == JUMP_ERROR) Control_Fault("Jump failed");
-            if (result == JUMP_LANDED) Resume_Control();
+            if (result == JUMP_ERROR) Control_Fault("Jump failed");/*跳跃错误后，此处卡死*/
+            if (result == JUMP_LANDED) Resume_Control();/*成功落地，通知恢复控制*/ */
             continue; /* 必须位于普通CAN/PID之前：跳跃期间屏蔽下面的控制帧和PID。 */
         }
         if(pid_due) { /* 跳跃期间的PID通知已消费，不积压到恢复后 */

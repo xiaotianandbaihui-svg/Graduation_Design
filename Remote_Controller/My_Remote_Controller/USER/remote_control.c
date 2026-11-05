@@ -7,19 +7,17 @@
 #define REMOTE_PI 3.14159265358979323846f
 
 static RemoteCommand command;
-static uint32_t last_send_ms;
-static uint8_t send_now;
+static uint32_t last_send_ms;/*记录上一次的发送时刻*/
+static uint8_t mode_frame_pending; /* 进入立即发首帧；退出只补发一次零速帧 */
 /* 0=空闲，1=还需发送jump=0，2及以上=剩余jump=1帧数+1。 */
 static uint8_t jump_frames;
 static RemoteFeedback feedback;
 static uint8_t feedback_frame[REMOTE_FEEDBACK_SIZE], feedback_count;
 static volatile int16_t received_speed, received_yaw;
-volatile uint8_t Lora_RxPending;
+volatile uint8_t Lora_RxPending;/*判断当前是否有接收到完整的一包回传数据*/
 volatile uint8_t Lora_Timeout;
 volatile uint32_t Lora_LastRxCycles;
-static uint8_t waiting_response, sent_jump;
-static uint32_t sent_cycles;
-static uint8_t manual_mode; /* 只控制遥控页的10秒掉线检测，不影响收包/响应重试 */
+static uint8_t manual_mode; /* 仅遥控页启用100ms周期发送和10秒掉线检测 */
 
 void RemoteControl_ResetRx(void)
 {
@@ -40,7 +38,7 @@ void RemoteControl_ReceiveByte(uint8_t byte)
         received_speed = (int16_t)((uint16_t)feedback_frame[2] |
                                   ((uint16_t)feedback_frame[3] << 8));
         received_yaw = yaw;
-        Lora_LastRxCycles = DWT->CYCCNT;/*接收到一帧数据就刷新一下时间戳*/
+        Lora_LastRxCycles = DWT->CYCCNT;/*接收到一帧数据就刷新一下时间戳，记录最新一次接收到的数据的时刻*/
         Lora_RxPending = 1u;
         feedback_count = 0u;
         return;
@@ -64,18 +62,18 @@ void RemoteControl_Init(void)
     __disable_irq();
     Lora_RxPending = Lora_Timeout = 0u;
     Lora_LastRxCycles = DWT->CYCCNT; /* uart_init已启用DWT，不清公共计数器 */
-    feedback_count = 0u;
+    feedback_count = 0u;/*收到的反馈数据计数，是接收缓冲区的“指针”位置 */
     __set_PRIMASK(mask);
     feedback.speed_mps = feedback.yaw_deg = 0.0f;
     feedback.valid = feedback.timed_out = 0u;
-    manual_mode = 0u;
-    waiting_response = 0u;
+    manual_mode = 0u;/*判断是否处于遥控模式*/
     command.speed_mps = 0.0f;
     command.yaw_deg = WrapYaw(REMOTE_YAW_OFFSET_DEG);/*这个REMOTE_YAW_OFFSET_DEG本质就是一个初始角度*/
     command.jump = 0u;
-    jump_frames = 0u;
+
+    jump_frames = 0u;/*最近一次尝试发送目标帧的时间，单位毫秒*/
     last_send_ms = 0u;
-    send_now = 1u;
+    mode_frame_pending = 0u; /* 上电主界面不发送控制帧，具体的，它是用来判断是否有因进入/退出遥控页而需要尽快发送的一帧 */
 }
 /*把速度(m/s)转化为转速(rpm)*/
 float RemoteControl_SpeedToRpm(float speed_mps)
@@ -90,6 +88,8 @@ void RemoteControl_SetManualMode(uint8_t enabled)
     vTaskSuspendAll();
     if (manual_mode != enabled) {
         manual_mode = enabled;
+        RemoteControl_Stop();
+        mode_frame_pending = 1u;
         feedback.valid = feedback.timed_out = 0u;
         if (enabled) {
             /* 重新进入遥控页从现在计10秒，不消费进入前留下的旧回传。 */
@@ -97,6 +97,7 @@ void RemoteControl_SetManualMode(uint8_t enabled)
             __disable_irq();
             Lora_LastRxCycles = DWT->CYCCNT;
             Lora_RxPending = 0u;
+            feedback_count = 0u;
             __set_PRIMASK(mask);
         }
     }
@@ -107,10 +108,10 @@ void RemoteControl_SetStick(float dx, float dy, float radius)
 {
     float amount, speed = 0.0f, yaw = 0.0f;
     if (!isfinite(dx) || !isfinite(dy) || !isfinite(radius) || radius <= 0.0f) {
-        RemoteControl_Release();
+        RemoteControl_Release();/*设置目标速度为0*/
         return;
     }
-    amount = sqrtf(dx * dx + dy * dy) / radius;
+    amount = sqrtf(dx * dx + dy * dy) / radius;/*计算比例*/
     if (amount > 1.0f) amount = 1.0f;
     if (amount > REMOTE_STICK_DEAD_ZONE) {
         speed = REMOTE_MAX_SPEED_MPS *
@@ -122,10 +123,7 @@ void RemoteControl_SetStick(float dx, float dy, float radius)
     vTaskSuspendAll();
     if (!manual_mode || !feedback.valid) command.speed_mps = 0.0f;
     else if (amount <= REMOTE_STICK_DEAD_ZONE) {
-        if (command.speed_mps != 0.0f) {
-            command.speed_mps = 0.0f;
-            send_now = 1u;
-        }
+        command.speed_mps = 0.0f;
     } else {
         command.speed_mps = speed;
         command.yaw_deg = yaw;
@@ -137,7 +135,6 @@ void RemoteControl_Release(void)
 {
     vTaskSuspendAll();
     command.speed_mps = 0.0f;
-    send_now = 1u;
     (void)xTaskResumeAll();
 }
 
@@ -146,7 +143,7 @@ void RemoteControl_Stop(void)
     vTaskSuspendAll();
     RemoteControl_Release(); /* FreeRTOS允许嵌套暂停，最外层恢复后才会切换任务。 */
     command.jump = 0u;
-    jump_frames = jump_frames ? 1u : 0u;
+    jump_frames = 0u; /* 后续周期帧/退出帧自然携带jump=0 ,跳跃指令发送阶段*/
     (void)xTaskResumeAll();
 }
 
@@ -155,7 +152,7 @@ void RemoteControl_RequestJump(void)
     vTaskSuspendAll();
     if (manual_mode && feedback.valid && !jump_frames) {
         RemoteControl_Release();
-        jump_frames = REMOTE_JUMP_FRAMES + 1u;
+        jump_frames = REMOTE_JUMP_FRAMES + 1u;/*jump其实是发送3帧，但是100ms发送一次，可能导致重复跳跃，所以我觉得改成0就好*/
         command.jump = 1u;
     }
     (void)xTaskResumeAll();
@@ -223,7 +220,7 @@ static int PrepareFrame(uint32_t now_ms, uint8_t frame[REMOTE_FRAME_SIZE])
     now = DWT->CYCCNT;
     timed_out = manual_mode && (uint32_t)(now - Lora_LastRxCycles) >=
                 (SystemCoreClock / 1000u) * REMOTE_LORA_TIMEOUT_MS;
-    received = Lora_RxPending;
+    received = Lora_RxPending;/*这个标志位原本是来通知有数据到达 ，一包完整的数据就位的*/
     speed = received_speed; yaw = received_yaw;
     Lora_RxPending = 0u;
     if (timed_out) {
@@ -238,46 +235,35 @@ static int PrepareFrame(uint32_t now_ms, uint8_t frame[REMOTE_FRAME_SIZE])
         feedback.valid = 0u;
         feedback.timed_out = 1u; /* 当前链路状态，与可由外部清零的超时事件标志分开 */
         RemoteControl_Stop(); /* 取消尚未完成的跳跃，下一帧发送零速度及jump=0 */
-        waiting_response = 0u;
     }
-    if (received) {
+    if (received && manual_mode) {
+        /*这里的0.0f和0.01f是因为下位机为了精度保障做的放缩，现在要放缩回来*/
         feedback.speed_mps = speed * 0.1f * (REMOTE_PI * REMOTE_WHEEL_DIAMETER_M) / 60.0f;
         feedback.yaw_deg = yaw * 0.01f;
         feedback.valid = 1u;
         feedback.timed_out = 0u;
-        /* 普通实测帧就是响应；只有收到响应才推进跳跃脉冲，不以UART发完代替。 */
-        if (waiting_response) {
-            if ((sent_jump && jump_frames > 1u) || (!sent_jump && jump_frames == 1u))
-                --jump_frames;
-            waiting_response = 0u;
-        }
+        /* 回传只更新实测值和在线状态，不改变上位机发送节拍。 */
     }
-    if (waiting_response) {
-        if ((uint32_t)(now - sent_cycles) <
-            (SystemCoreClock / 1000u) * REMOTE_RESPONSE_TIMEOUT_MS) return 0;
-        waiting_response = 0u;
-        send_now = 1u; /* 响应丢失后发送最新目标，不能一直卡在等待状态 */
-    }
-    if (!send_now && (uint32_t)(now_ms - last_send_ms) < REMOTE_SEND_PERIOD_MS) return 0;
-    last_send_ms = now_ms;
-    send_now = 0u;
+    if (!mode_frame_pending &&/*这个变量简单说就是是否立即发送一帧的*/
+        (!manual_mode || (uint32_t)(now_ms - last_send_ms) < REMOTE_SEND_PERIOD_MS)) return 0;
+    last_send_ms = now_ms; /* 即使UART失败也等下一周期，不连发补包 */
+    mode_frame_pending = 0u;
     command.jump = jump_frames > 1u ? 1u : 0u;
-    if (!RemoteControl_BuildFrame(&command, frame)) return -1;
-    sent_jump = command.jump;
-    waiting_response = 1u;
-    return 1;
+    return RemoteControl_BuildFrame(&command, frame) ? 1 : -1;
 }
 
 int RemoteControl_Poll(uint32_t now_ms)
 {
     uint8_t frame[REMOTE_FRAME_SIZE];
     int result;
+    /* 组帧、UART发送及跳跃计数作为一次提交，避免换页插入旧目标。
+     * uart_send_bytes也会嵌套暂停调度；中断始终可响应。 */
     vTaskSuspendAll();
     result = PrepareFrame(now_ms, frame);
+    if (result == 1) {
+        result = uart_send_bytes(frame, sizeof(frame)) ? 1 : -1;
+        if (result == 1 && jump_frames) --jump_frames;
+    }
     (void)xTaskResumeAll();
-    if (result != 1) return result;
-    sent_cycles = DWT->CYCCNT;
-    /* 即使UART只发出半帧，也先留出一轮响应时间，避免连续塞数据。
-     * UART内部仍保留完整帧的发送保护；不持有上述共享数据保护等待收包。 */
-    return uart_send_bytes(frame, sizeof(frame)) ? 1 : -1;
+    return result;
 }

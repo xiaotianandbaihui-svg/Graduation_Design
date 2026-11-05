@@ -77,26 +77,28 @@ int8_t Jump_Start(uint32_t now_ms)
           JUMP_MID_MM + difference <= FOOT_Y_MAX_MM) ||
         !TargetOK(low_mean) || !TargetOK(JUMP_MID_MM) || !TargetOK(high_mean))
         return JUMP_ERROR;
-    started = sampled = now_ms; /* 无符号差值计时，允许毫秒时钟自然回绕 */
+    started = sampled = now_ms; /* 无符号差值计时，允许毫秒时钟自然回绕 ，设置正常开始时刻，这个started会用于后续对于全局超时的检测*/
     return MoveTo(low_mean, 1, ROBOT_JUMP_SQUAT, now_ms);/*这里更改了Robot_State*/
 }
 
 int8_t Jump_Update(uint32_t now_ms)
 {
-    uint32_t gap = (uint32_t)(now_ms - sampled);
+    uint32_t gap = (uint32_t)(now_ms - sampled);/*这个gap说白了就是重力采样之间的采样间隔，防止误判的，比如万一遇到一个石头，垫了一下，采样密集，瞬间满足，出错*/
     uint32_t elapsed = (uint32_t)(now_ms - phase_time);/*不同阶段相隔的时间*/
     float accel_g = 0.0f;
     uint8_t have_sample = 0; /* 仅本次调用有效；同一个样本不能反复累计 */
 
     if (Robot_State == ROBOT_NORMAL) return JUMP_IDLE;
-    if (Robot_State == ROBOT_FAULT) return JUMP_ERROR;
+    if (Robot_State == ROBOT_FAULT) return JUMP_ERROR;/*跳跃进入错误状态*/
 
-    if (Robot_State <= ROBOT_JUMP_LAND &&
-        (uint32_t)(now_ms - started) >= JUMP_TIMEOUT_MS) return Fault();/*跳跃执行全过程超时*/
+    if (Robot_State <= ROBOT_JUMP_LAND &&/*这个小于等于其实就是全部的正常状态，当前讨论的这个函数会在Robot_State != ROBOT_NORMAL时调用，
+        所以只要开始了跳跃，结果检测到超时，就直接进入错误函数*/
+        (uint32_t)(now_ms - started) >= JUMP_TIMEOUT_MS) return Fault();/*跳跃执行全过程超时，设置机器人的全局状态为错误态*/
 
 
-    /* 采样限速只限制加速度检测，不能提前return屏蔽整个状态机。
-     * 下蹲/收放腿等待/恢复直接检查now_ms，避免被20ms采样周期取整。 */
+    /*
+    *现在就是要去检查检测重力了，这个if给出什么时候检测加速度来确认腾空和落地
+    */
     if (((Robot_State == ROBOT_JUMP_PUSH && elapsed >= JUMP_PUSH_MIN_MS) ||
          ((Robot_State == ROBOT_JUMP_RETRACT || Robot_State == ROBOT_JUMP_LAND) &&
           elapsed >= JUMP_LAND_BLANK_MS)) && gap >= JUMP_SAMPLE_MS) {
@@ -108,15 +110,15 @@ int8_t Jump_Update(uint32_t now_ms)
         az = imu963ra_acc_transition(imu963ra_acc_z);
         accel_g = sqrtf(ax*ax + ay*ay + az*az);
         if (!isfinite(accel_g)) return Fault();
-        if (gap > 2u * JUMP_SAMPLE_MS) count = 0;
+        if (gap > 2u * JUMP_SAMPLE_MS) count = 0;/*两次采样时间过长，这也说明可能卡死了，而且数据不可信，出错*/
         sampled = now_ms;
         have_sample = 1;
     }
-
+    /*以下是对不同跳跃阶段的处理*/
     switch (Robot_State) {
     case ROBOT_JUMP_SQUAT:
         if (elapsed >= JUMP_SQUAT_MS)/*这里等待舵机响应达到设定的最低位置*/
-            return MoveTo(high_mean, 1, ROBOT_JUMP_PUSH, now_ms);
+            return MoveTo(high_mean, 1, ROBOT_JUMP_PUSH, now_ms);/*立即伸腿，并设置状态为蹬腿态*/
         break;
     case ROBOT_JUMP_PUSH:
         if (!have_sample) break; /* 最短蹬伸等待结束后，只累计新采集的样本 */
