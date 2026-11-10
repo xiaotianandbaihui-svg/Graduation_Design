@@ -14,6 +14,9 @@
 
 static uint8_t ready;/*用于判断ADC启动状态的全局变量*/
 static float zero_a[2], zero_b[2];/*电机零点的原始数值采取*/
+static const char *last_error = "none";
+
+const char *CurrentSense_GetLastError(void) { return last_error; }
 
 static int DriverActive(void)/*这边主要就是确认那两个DRV8323是否正常工作的*/
 {
@@ -74,7 +77,9 @@ int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
 {
     uint32_t began = CycleCounter_Now();
     CurrentSense_Raw sample;
-    if (!ready || raw == 0 || !DriverActive()) return 0;
+    last_error = "none";
+    if (!ready || raw == 0) { last_error = "not-ready/argument"; return 0; }
+    if (!DriverActive()) { last_error = "driver-inactive"; return 0; }
     ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE);
     ADC_ExternalTrigInjectedConvConfig(ADC1, ADC_ExternalTrigInjecConv_T2_TRGO);
     ADC_ClearFlag(ADC1, ADC_FLAG_JEOC);
@@ -82,15 +87,17 @@ int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
     /* 先等OC1REF明确为低，再打开触发；下一次真正的上升沿才开始采样。
      * 留半个CCR1的距离，避免在OC1REF已经为高时使能外部触发。 */
     while (TIM2->CNT >= TIM2->CCR1 / 2u)/*这里的CCR1就是通过ADC配置得到的那个上升沿跳变点*/
-        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u)/*超过200us没到，就认为超时*/
+        if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u) {
+            last_error = "pwm-window-timeout";
             return Fail();
+        }
 
-    
     ADC_ExternalTrigInjectedConvCmd(ADC1, ENABLE);/*开启触发，等待转化完成*/
     while (ADC_GetFlagStatus(ADC1, ADC_FLAG_JEOC) == RESET ||
            ADC_GetFlagStatus(ADC2, ADC_FLAG_JEOC) == RESET) {
         if ((uint32_t)(CycleCounter_Now() - began) > SystemCoreClock / 5000u) {
             ADC_ExternalTrigInjectedConvCmd(ADC1, DISABLE); /* 最多等待200us */
+            last_error = "adc-conversion-timeout";
             return Fail();
         }
     }/*只等待200us*/
@@ -100,7 +107,7 @@ int CurrentSense_ReadSynchronized(CurrentSense_Raw *raw)
     sample.b[0] = ADC_GetInjectedConversionValue(ADC2, ADC_InjectedChannel_1);
     sample.a[1] = ADC_GetInjectedConversionValue(ADC1, ADC_InjectedChannel_2);
     sample.b[1] = ADC_GetInjectedConversionValue(ADC2, ADC_InjectedChannel_2);
-    if (!DriverActive()) return 0;
+    if (!DriverActive()) { last_error = "driver-inactive"; return 0; }
     *raw = sample;
     return 1;
 }
@@ -188,24 +195,45 @@ int CurrentSense_Init(void)
     return 1;
 }
 
+int CurrentSense_GetZero(uint8_t id, float *a, float *b)
+{
+    if (!ready || id > 1u || a == 0 || b == 0) return 0;
+    *a = zero_a[id];
+    *b = zero_b[id];
+    return 1;
+}
+
+float va,vb;
 /*把电压转化为电流*/
 int CurrentSense_Convert(uint8_t id, const CurrentSense_Raw *raw,
                          CurrentSense_Phase *current)
 {
-    float va, vb;
     CurrentSense_Phase result;
     const float scale = ADC_VOLTS_PER_COUNT /
                         (CURRENT_SENSE_GAIN * CURRENT_SENSE_SHUNT_OHM);
-    if (!ready || id > 1u || raw == 0 || current == 0) return 0;
+    last_error = "none";
+    if (!ready || id > 1u || raw == 0 || current == 0) {
+        last_error = "not-ready/argument";
+        return 0;
+    }
     va = raw->a[id] * ADC_VOLTS_PER_COUNT;
     vb = raw->b[id] * ADC_VOLTS_PER_COUNT;
+		
     /* 取0.3V余量，超量程直接报错，不把被削顶的值当真实电流。 */
     if (va <= 0.3f || va >= CURRENT_SENSE_VDDA_V - 0.3f ||
-        vb <= 0.3f || vb >= CURRENT_SENSE_VDDA_V - 0.3f) return 0;
+        vb <= 0.3f || vb >= CURRENT_SENSE_VDDA_V - 0.3f) {
+        last_error = "adc-out-of-range";
+        return 0;
+    }
+				
     /* 正方向：星点经绕组流向逆变器；与原流入电机的定义相反。 */
     result.ia_a = (zero_a[id] - (float)raw->a[id]) * scale;
     result.ib_a = (zero_b[id] - (float)raw->b[id]) * scale;
     result.ic_a = -result.ia_a - result.ib_a;
+		
     *current = result;
     return 1;
 }
+
+
+

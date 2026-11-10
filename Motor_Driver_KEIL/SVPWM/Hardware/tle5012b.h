@@ -44,6 +44,8 @@ typedef enum {
  * 同一SPI总线不可被其他中断/任务同时使用。 */
 
 void TLE5012B_BusInit(void);
+/* 最近一次实际SSC传输的结果；只读缓存，不重新访问SPI。 */
+TLE_Result TLE5012B_GetLastResult(uint8_t id);
 TLE_Result TLE5012B_Init(uint8_t id); /* 清上电状态，检查360度量程/DSPU并读角度 */
 TLE_Result TLE5012B_ReadReg(uint8_t id, uint8_t reg, uint16_t *value);
 TLE_Result TLE5012B_WriteReg(uint8_t id, uint8_t reg, uint16_t value);

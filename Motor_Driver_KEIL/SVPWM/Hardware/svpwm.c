@@ -1,12 +1,12 @@
 #include "svpwm.h"
 #include "stm32f10x.h"
-#include "stm32f10x_gpio.h"
 #include "stm32f10x_rcc.h"
 #include "stm32f10x_tim.h"
 #include "tle5012b.h"
 #include <math.h>
 #include "Delay.h"
 #include "current_sense.h"
+#include <stdio.h>
 
 float zero_point_1=0,zero_point_2=0;//记录两个电机在磁编码器特定安装下的A相角度
 float first_mechanical_angle=0,second_mechanical_angle=0;//记录电机当前机械角度
@@ -15,6 +15,29 @@ static TIM_TypeDef * const timer[2] = {TIM2, TIM4};
 static uint16_t period, current_compare_limit;
 static uint8_t ready, running[2], calibrated;
 static int8_t encoder_sign[2];
+
+/* NULL时正常运行；只有Motor_InitTest期间记录并打印当前初始化步骤。 */
+static const char *init_test_step;
+
+static void InitTestStep(const char *step)
+{
+    if (init_test_step) init_test_step = step;
+}
+
+/* out为ODR命令，in为IDR实际引脚读回；参数必须先采集，再停机/打印。 */
+static void PrintInitPins(const char *label, uint16_t ia, uint16_t ib,
+                          uint16_t oa, uint16_t ob)
+{
+    printf("[%s] EN(out/in)=%u/%u CAL(out/in)=%u/%u nFAULT1/2=%u/%u\r\n",
+           label, !!(oa & GPIO_Pin_0), !!(ia & GPIO_Pin_0),
+           !!(ob & GPIO_Pin_4), !!(ib & GPIO_Pin_4),
+           !!(ia & GPIO_Pin_8), !!(ib & GPIO_Pin_5));
+    printf(" INL1 ABC(out/in)=%u%u%u/%u%u%u INL2 ABC(out/in)=%u%u%u/%u%u%u\r\n",
+           !!(ob & GPIO_Pin_12), !!(ob & GPIO_Pin_11), !!(ob & GPIO_Pin_10),
+           !!(ib & GPIO_Pin_12), !!(ib & GPIO_Pin_11), !!(ib & GPIO_Pin_10),
+           !!(ob & GPIO_Pin_6), !!(ob & GPIO_Pin_3), !!(oa & GPIO_Pin_15),
+           !!(ib & GPIO_Pin_6), !!(ib & GPIO_Pin_3), !!(ia & GPIO_Pin_15));
+}
 
 static void ClearCalibration(void)
 {
@@ -37,7 +60,7 @@ static float Wrap360(float angle)
 }
 
 /* 3PWM模式：INL=1时响应INH的PWM；INL=0时该相上下管均关闭。 */
-static void PhaseEnable(uint8_t id, BitAction state)
+void PhaseEnable(uint8_t id, BitAction state)
 {
     if (id == 0u) {
         GPIO_WriteBit(GPIOB, GPIO_Pin_12 | GPIO_Pin_11 | GPIO_Pin_10, state);
@@ -57,18 +80,33 @@ void SVPWM_Stop(uint8_t id)
 
 static int Fail(void)
 {
+    uint16_t ia = 0u, ib = 0u, oa = 0u, ob = 0u;
+    if (init_test_step) {
+        ia = GPIO_ReadInputData(GPIOA); ib = GPIO_ReadInputData(GPIOB);
+        oa = GPIO_ReadOutputData(GPIOA); ob = GPIO_ReadOutputData(GPIOB);
+    }
     SVPWM_Stop(0u);
     SVPWM_Stop(1u);
     GPIO_ResetBits(GPIOA, GPIO_Pin_0);
     ready = 0u;
     ClearCalibration();
+    if (init_test_step) {
+        printf("[FAIL] step=%s; both motors disabled\r\n", init_test_step);
+        PrintInitPins("BEFORE_FAIL", ia, ib, oa, ob);
+    }
     return 0;
 }
 
+volatile uint8_t fault1_level = 0;
+volatile uint8_t fault2_level = 0;
+
 static int DriverOK(void)
 {
-    return GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_8) == Bit_SET &&
-           GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5) == Bit_SET;
+    fault1_level = GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_8);
+    fault2_level = GPIO_ReadInputDataBit(GPIOB, GPIO_Pin_5);
+
+    return fault1_level == Bit_SET &&
+           fault2_level == Bit_SET;
 }
 
 static void PinMode(GPIO_TypeDef *port, uint16_t pins, GPIOMode_TypeDef mode)
@@ -134,7 +172,7 @@ int SVPWM_Init(void)
     GPIO_ResetBits(GPIOB,GPIO_Pin_4);/*我为了保险啊，还是保持校准200~300us，(因为stm32芯片复位后这个引脚本身也是弱上拉的)，DRV要求至少100us
     那我就给充足时间校准！*/
 
-    /*这俩函数主要是把INLA/B/C拉高，正式允许DRV芯片的PWM3模式开始工作*/
+    /* 初始化时INLA/B/C拉低，保持高阻；首次SVPWM_Set装载PWM后才拉高。 */
     PhaseEnable(0u, Bit_RESET);
     PhaseEnable(1u, Bit_RESET);
 
@@ -151,8 +189,13 @@ int SVPWM_Init(void)
     RCC_GetClocksFreq(&clocks);
     tim_hz = clocks.PCLK1_Frequency;
     if (clocks.PCLK1_Frequency != clocks.HCLK_Frequency) tim_hz *= 2u;
+    InitTestStep("PWM clock");
     counts = tim_hz / (2u * SVPWM_PWM_HZ);/*20khz对应的是1800*/
-    if (counts < 2u || counts > 65535u) return 0;
+    if (init_test_step)
+        printf("[CLOCK] HCLK=%lu TIM=%lu ADC=%luHz ARR=%lu\r\n",
+               (unsigned long)clocks.HCLK_Frequency, (unsigned long)tim_hz,
+               (unsigned long)(clocks.PCLK2_Frequency / 6u), (unsigned long)counts);
+    if (counts < 2u || counts > 65535u) return Fail();
     period = (uint16_t)counts;/*这里特别说明，PWM1模式下，中心对齐(中心对齐有向上计数和向下计数两个阶段)，向上计数时候CNT<CCRx输出有效电平
     向下计数的时候CNT≤CCRx的时候输出有效电平*/
 
@@ -169,7 +212,23 @@ int SVPWM_Init(void)
     Delay_us(2000u); /* 等待DRV唤醒，INL仍全为低。 */
     ready = 1u;/*可见，这里的ready表示给DRV8323的相关引脚已经配置完成，DRV芯片的硬件校准步骤已经完成*/
     /* INL仍全低、MOS不切换时完成CSA校准及四路ADC零偏采集。 */
-    return DriverOK() && CurrentSense_Init() ? 1 : Fail();
+    InitTestStep("DRV wake / nFAULT");
+    if (!DriverOK()) return Fail();
+    InitTestStep("ADC / CSA zero calibration");
+    if (!CurrentSense_Init()) return Fail();
+    if (init_test_step) {
+        uint8_t id;
+        float a, b;
+        PrintInitPins("DRV_READY", GPIO_ReadInputData(GPIOA), GPIO_ReadInputData(GPIOB),
+                      GPIO_ReadOutputData(GPIOA), GPIO_ReadOutputData(GPIOB));
+        for (id = 0u; id < 2u; ++id) {
+            if (CurrentSense_GetZero(id, &a, &b))
+                printf("[ADC M%u] zero_A=%.2f (%.3fV) zero_B=%.2f (%.3fV)\r\n",
+                       (unsigned)(id + 1u), a, a * CURRENT_SENSE_VDDA_V / 4096.0f,
+                       b, b * CURRENT_SENSE_VDDA_V / 4096.0f);
+        }
+    }
+    return 1;
 }
 
 static uint16_t Compare(float duty)
@@ -232,13 +291,21 @@ int SVPWM_Set(uint8_t id, float voltage_deg, uint16_t modulation)
 static int AlignAndRead(uint8_t id, float voltage_deg, float *mechanical)
 {
     uint32_t elapsed, stable_ms = 0u;
-    float current, reference = 0.0f;
+    float current = 0.0f, reference = 0.0f;
+    TLE_Result result;
 
     if (!SVPWM_Set(id, voltage_deg, SVPWM_ALIGN_MOD)) return 0;
     for (elapsed = 10u; elapsed <= 1500u; elapsed += 10u) {
         Delay_ms(10u);
-        if (!DriverOK() || TLE5012B_ReadAngle(id, &current) != TLE_OK ||/*注意了，这里读到的是机械角度*/
-            !isfinite(current) || current < 0.0f || current >= 360.0f) return 0;
+        if (!DriverOK()) return Fail();
+        result = TLE5012B_ReadAngle(id, &current); /* 机械角，单位度 */
+        if (result != TLE_OK || !isfinite(current) || current < 0.0f || current >= 360.0f) {
+            Fail(); /* 先停机，不能带着对齐电压等待串口打印。 */
+            if (init_test_step)
+                printf("[ENC M%u] read_result=%d angle=%.3fdeg (invalid)\r\n",
+                       (unsigned)(id + 1u), (int)result, current);
+            return 0;
+        }
         if (elapsed <= 500u ||
             fabsf(Wrap360(current - reference + 180.0f) - 180.0f) > 0.25f) {/*把角度差值限制在[-180°,180°)范围内 */
             reference = current;
@@ -246,44 +313,78 @@ static int AlignAndRead(uint8_t id, float voltage_deg, float *mechanical)
         } else {
             stable_ms += 10u;
         }
-        if (stable_ms >= 100u) {
+        if (stable_ms >= 500u) {
             *mechanical = current;
             return 1;
         }
     }
+    Fail();
+    if (init_test_step)
+        printf("[ALIGN M%u] not stable within 1500ms; last=%.3fdeg\r\n",
+               (unsigned)(id + 1u), current);
     return 0;
 }
 /*主函数对于电机部分的更新直接调用这个函数就好，这个函数会递归调用ADC初始化，DRV初始化的*/
 int Motor_init(void)
 {
-    float zeros[2], angle90[2], delta, expected;
+    float zeros[2], angle180[2], delta, expected;
     int8_t signs[2];
     uint8_t id;
+    TLE_Result result;
+    uint16_t ia = 0u, ib = 0u, oa = 0u, ob = 0u;
 
+    InitTestStep("PWM / GPIO init");
     if (!SVPWM_Init()) return 0;/*这里主要是对DRV8323芯片的初始化，对ADC初始化，得到DRV8323的基准电压*/
+    InitTestStep("alignment parameters");
     if (SVPWM_POLE_PAIRS == 0u || SVPWM_ALIGN_MOD == 0u ||
-        SVPWM_ALIGN_MOD > 100u) return Fail();
+        SVPWM_ALIGN_MOD > 1000u) return Fail();
     Delay_ms(10u); /* SPI2/CS沿用已有配置，补足编码器上电等待。 */
-    if (TLE5012B_Init(0u) != TLE_OK || TLE5012B_Init(1u) != TLE_OK) //这里就初始化了磁编码器，但是呢这里没有SPI硬件的初始化，所以，这个函数调用之前，要调用SPI的初始化函数
-        return Fail();
+    /* SPI2仍由调用方先执行TLE5012B_BusInit；这里检查每颗编码器。 */
+    for (id = 0u; id < 2u; ++id) {
+        InitTestStep(id == 0u ? "M1 encoder init" : "M2 encoder init");
+        result = TLE5012B_Init(id);
+        if (result != TLE_OK) {
+            Fail();
+            if (init_test_step)
+                printf("[ENC M%u] init_result=%d\r\n", (unsigned)(id + 1u), (int)result);
+            return 0;
+        }
+        if (init_test_step) printf("[ENC M%u] init_result=0 (OK)\r\n", (unsigned)(id + 1u));
+    }
 
     /*开始校准机械角度增长方向和电角度增长方向，正式把电角度增长方向作为轮子转动正方向*/
-    expected = 90.0f / (float)SVPWM_POLE_PAIRS; /* 7极对数：约12.86机械度 */
+    expected = 150.0f / (float)SVPWM_POLE_PAIRS; /* 7极对数：约12.86机械度 */
     for (id = 0u; id < 2u; ++id) {
         /* 0度记录零点，保持通电直接切90度；中间不Stop、不扫描。 */
-        if (!AlignAndRead(id, 0.0f, &zeros[id]) ||
-            !AlignAndRead(id, 90.0f, &angle90[id])) return Fail();
-				delta = angle90[id] - zeros[id];
+        InitTestStep(id == 0u ? "M1 align 0deg" : "M2 align 0deg");
+        if (!AlignAndRead(id, 0.0f, &zeros[id])) return 0;
+        InitTestStep(id == 0u ? "M1 align 150deg" : "M2 align 150deg");
+        if (!AlignAndRead(id, 150.0f, &angle180[id])) return 0;
+        if (init_test_step) {
+            ia = GPIO_ReadInputData(GPIOA); ib = GPIO_ReadInputData(GPIOB);
+            oa = GPIO_ReadOutputData(GPIOA); ob = GPIO_ReadOutputData(GPIOB);
+        }
+        SVPWM_Stop(id); /* 两次对齐之间不停机；完成90度测量后再停机打印。 */
+				delta = angle180[id] - zeros[id];
 
 				if (delta >= 180.0f) delta -= 360.0f;
 				if (delta < -180.0f) delta += 360.0f;
 				/*上面两个if用于处理如：直接相减：2.86 − 350 = −347.14°
 				修正之后：−347.14 + 360 = +12.86°的情况*/
 				
+        if (init_test_step) {
+            printf("[ALIGN M%u] mech0=%.3f mech90=%.3f delta=%.3f expected_abs=%.3fdeg\r\n",
+                   (unsigned)(id + 1u), zeros[id], angle180[id], delta, expected);
+            PrintInitPins("ALIGN90_BEFORE_STOP", ia, ib, oa, ob);
+            printf("[PWM M%u] ARR=%u CCR_A/B/C=%u/%u/%u (last 90deg command)\r\n",
+                   (unsigned)(id + 1u), (unsigned)timer[id]->ARR,
+                   (unsigned)timer[id]->CCR2, (unsigned)timer[id]->CCR3,
+                   (unsigned)timer[id]->CCR4);
+        }
         /* 位移大小须在理论值的±10%内，不能把堵转/抖动当成方向。 */
+        InitTestStep(id == 0u ? "M1 displacement check" : "M2 displacement check");
         if (fabsf(fabsf(delta) - expected) > expected * 0.10f) return Fail();
         signs[id] = delta > 0.0f ? 1 : -1;
-        SVPWM_Stop(id);/*校准完就停机，一个电机一个电机的校准*/
     }
 
     /* 两路都通过后才发布结果；零点仍是0度矢量下的读数。 */
@@ -291,12 +392,38 @@ int Motor_init(void)
     encoder_sign[1] = signs[1];
     zero_point_1 = zeros[0];
     zero_point_2 = zeros[1];
-    first_mechanical_angle = angle90[0];
-    second_mechanical_angle = angle90[1];
-    electrical1 = Wrap360((float)signs[0] * SVPWM_POLE_PAIRS * (angle90[0] - zeros[0]));
-    electrical2 = Wrap360((float)signs[1] * SVPWM_POLE_PAIRS * (angle90[1] - zeros[1]));
+    first_mechanical_angle = angle180[0];
+    second_mechanical_angle = angle180[1];
+    electrical1 = Wrap360((float)signs[0] * SVPWM_POLE_PAIRS * (angle180[0] - zeros[0]));
+    electrical2 = Wrap360((float)signs[1] * SVPWM_POLE_PAIRS * (angle180[1] - zeros[1]));
     calibrated = 1u;/*设置已校准标记，这里的校准表示：电角度和机械角度方向已经用正负符号统一，ADC和DRV8323的校准程序也已经完全成功执行*/
     return 1;
+}
+
+int Motor_InitTest(void)
+{
+    int result;
+    printf("=== Motor initialization test: one shot ===\n");
+    printf("ALIGN_MOD=%u/1000 POLE_PAIRS=%u PWM=%luHz VDDA_config=%.3fV\n",
+           (unsigned)SVPWM_ALIGN_MOD, (unsigned)SVPWM_POLE_PAIRS,
+           (unsigned long)SVPWM_PWM_HZ, CURRENT_SENSE_VDDA_V);
+    printf("INL=000 during ADC calibration; 111 only during motor alignment.\n");
+    init_test_step = "start";/*测试点标记设置开始*/
+    result = Motor_init();
+    init_test_step = 0;
+    SVPWM_Stop(0u);
+    SVPWM_Stop(1u);
+    if (result) {
+        printf("[RESULT M1] zero=%.3fdeg encoder_sign=%d electrical90=%.3fdeg\n",
+               zero_point_1, (int)encoder_sign[0], electrical1);
+        printf("[RESULT M2] zero=%.3fdeg encoder_sign=%d electrical90=%.3fdeg\n",
+               zero_point_2, (int)encoder_sign[1], electrical2);
+    }
+    PrintInitPins("FINAL_STOP", GPIO_ReadInputData(GPIOA), GPIO_ReadInputData(GPIOB),
+                  GPIO_ReadOutputData(GPIOA), GPIO_ReadOutputData(GPIOB));
+    printf("=== Motor init %s; INL disabled; no automatic retry ===\n",
+           result ? "PASS" : "FAIL");
+    return result;
 }
 
 /*这个是纯电压环特供，哈哈哈，第一版方案，就是生成一个旋转电压矢量，目前方案已废弃*/
@@ -451,7 +578,8 @@ int SVPWM_ReadRotor(uint8_t id, float *mechanical_deg, float *electrical_deg)
     if (TLE5012B_ReadAngle(id, &mechanical) != TLE_OK) return Fail();
     zero = id == 0u ? zero_point_1 : zero_point_2;
     *mechanical_deg = mechanical;
-    *electrical_deg = Wrap360(encoder_sign[id] * SVPWM_POLE_PAIRS * (mechanical - zero));
+    /* 先转float，避免负方向与无符号极对数相乘后变成巨大正数。 */
+    *electrical_deg = Wrap360((float)encoder_sign[id] * SVPWM_POLE_PAIRS * (mechanical - zero));
 
 
     /*给记录转子电角度和机械角度的全局变量赋值*/

@@ -10,7 +10,7 @@
 /* 静止对齐幅值，单位与modulation相同；代码接受1~500。
  * 100是调试初值，不是电流限制；太小无法转动时标定会失败。
  * 标定时两轮悬空、可自由转动；不要用手阻挡或转动轮子。 */
-#define SVPWM_ALIGN_MOD 100u
+#define SVPWM_ALIGN_MOD 200u
 
 /* 方向由Motor_init自动测出，不再手填：+1/-1有效，0表示未标定或失效。
  * 表示0->90度定子矢量变化时编码器机械角的增减，不代表车体前进方向。
@@ -18,7 +18,7 @@
 int8_t SVPWM_GetEncoderSign(uint8_t id);
 #define SVPWM_ENCODER_SIGN_1 (SVPWM_GetEncoderSign(0u))
 #define SVPWM_ENCODER_SIGN_2 (SVPWM_GetEncoderSign(1u))
-
+#include "stm32f10x_gpio.h"
 /* STM32F103C8T6标准库，板5，一颗MCU驱动两个DRV8323H。
  * 两颗MODE各自通过47kΩ接地选择3PWM，不共用MODE网络。
  *
@@ -53,7 +53,13 @@ int Motor_init(void);  /*直接调用这个函数即可，返回值：1  成了 
  * 结束后高阻，清除旧转子标定；上电时两轮应静止，以免零偏受发电电流影响。
  * Motor_init已经调用它；日常无需另外调用。 */
 int SVPWM_Init(void);
-
+/* Formal==3专用：串口及TLE5012B_BusInit完成后调用一次。
+ * 复用Motor_init，打印GPIO、ADC零偏、编码器状态及0/90度标定结果。
+ * 会按SVPWM_ALIGN_MOD通电对齐两轮，结束后双路高阻；不启动电流环。
+ * 对齐期间不打印，故障先停机再输出故障前的引脚快照。 */
+int Motor_InitTest(void);
+/* 3PWM模式：INL=1时响应INH的PWM；INL=0时该相上下管均关闭。 */
+void PhaseEnable(uint8_t id, BitAction state);
 /* voltage_deg：定子电压矢量角，不是编码器机械角。
  * 0度沿A相正方向，正角度按A->B->C旋转，内部归一化到[0,360)。
  * modulation：0~1000，1000对应线性区最大幅值Vbus/sqrt(3)。

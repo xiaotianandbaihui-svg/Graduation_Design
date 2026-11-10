@@ -84,7 +84,7 @@ int CurrentLoop_Update(CurrentLoop *loop, const CurrentLoop_Feedback *feedback,
     previous_d = loop->d.integral;
     previous_q = loop->q.integral;
 
-    /*这是首次限幅，算是一个初次限幅，免得数量过大，计算后溢出了，数学上，其实是对最终合成的那个电压矢量进行限幅*/
+    /*这是首次限幅，算是一个初次积分限幅，免得数量过大，计算后溢出了，数学上，其实是对最终合成的那个电压矢量进行限幅*/
     raw_d = PI_Output(&loop->d, ed, limit);
     raw_q = PI_Output(&loop->q, eq, limit);
     magnitude = hypotf(raw_d, raw_q);/*平方和开根号，也就是欧氏距离的那个公式*/

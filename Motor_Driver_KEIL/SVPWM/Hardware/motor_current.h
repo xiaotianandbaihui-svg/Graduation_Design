@@ -4,12 +4,12 @@
 #include <stdint.h>
 
 /* 板5正式电流驱动：20kHz PWM，TIM1固定周期运行双电机d/q PI。
- * Cortex-M3无FPU，先用2kHz；提频前实测MotorCurrent_LastStepUs()，
+ * Cortex-M3无FPU，当前用1kHz；提频前实测MotorCurrent_LastStepUs()，
  * 一拍包含两轮SPI、等待PWM同步ADC及PI，超时会停止两轮。
  * 电流环运行时，主循环不可再直接读SPI编码器/ADC或调用电压驱动接口。 */
-#define MOTOR_CURRENT_HZ                 2000u /*这里是电流环运行的频率*/
-#define MOTOR_CURRENT_BUS_VOLTAGE_V      12.0f /* 估计值！当前板上无母线ADC，按实测电压填写，我这边为了有裕量，就写12V，但是满电应该是12.6V的 */
-#define MOTOR_CURRENT_LIMIT_A            2.0f  /* ±1000指令对应的Iq幅值；初次调试先小电流 */
+#define MOTOR_CURRENT_HZ                 1000u /*这里是电流环运行的频率*/
+#define MOTOR_CURRENT_BUS_VOLTAGE_V      12.6f /* 实际母线电压，当前无母线ADC，按实测值填写！不是输出电压限幅；裕量用VOLTAGE_RATIO设置。 */
+#define MOTOR_CURRENT_LIMIT_A            6.0f  /* ±1000指令对应的Iq幅值；初次调试先小电流 */
 #define MOTOR_CURRENT_TRIP_A             12.0f /* 任一相达到此值即软件停机；不是硬件瞬时保护。这个电流也就是电机的堵转电流，硬件的nFault检测电流是超过12A的，那个在
 更大的电流下或许有用，但是此处，软件停机是更加有用的 */
 #define MOTOR_CURRENT_COMMAND_TIMEOUT_MS 100u  /* 连续无新外环指令则停机；跳跃停环后不计时 */
@@ -27,10 +27,10 @@
  * Kp单位V/A，Ki单位V/(A*s)；初始化时合并Ki*Ts，运行时不再重复乘Ts。
  * 此处是两轮共用初值；两电机不同时可在MotorCurrent_Init分别传入配置。 */
 
-#define MOTOR_CURRENT_KP_D               0.0f
-#define MOTOR_CURRENT_KI_D               0.0f
-#define MOTOR_CURRENT_KP_Q               0.0f
-#define MOTOR_CURRENT_KI_Q               0.0f
+#define MOTOR_CURRENT_KP_D               0.063f
+#define MOTOR_CURRENT_KI_D               100.0f
+#define MOTOR_CURRENT_KP_Q               0.063f
+#define MOTOR_CURRENT_KI_Q               157.0f
 /*------------------------------------------------------------------------------------------------*/
 /*------------------------- 这里就是电流环的PI(D)参数了，调参在此处(结束)----------------------------*/
 /*------------------------------------------------------------------------------------------------*/
@@ -64,5 +64,9 @@ uint32_t MotorCurrent_LastStepUs(void);
 int MotorCurrent_SetCommand(int16_t left, int16_t right);
 /* 返回电角度正方向的机械rpm缓存；不访问SPI。 */
 int MotorCurrent_ReadSpeed(float *left_rpm, float *right_rpm);
+
+void print(void);
+/* 故障停机后由主循环调用；打印保留的失败步骤、采样值和底层错误。 */
+void MotorCurrent_PrintFault(void);
 
 #endif

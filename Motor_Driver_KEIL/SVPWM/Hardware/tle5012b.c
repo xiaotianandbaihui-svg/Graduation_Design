@@ -4,14 +4,25 @@
 #include "stm32f10x_spi.h"
 #include "stm32f10x_rcc.h"
 #include "Delay.h"
+#include "cycle_counter.h"
 /* 仅限制等待次数，防止SPI异常时永久卡住，不是精确的微秒超时。 */
 #define SPI_WAIT_LIMIT 10000u
+
+static TLE_Result last_result[2];
+
+TLE_Result TLE5012B_GetLastResult(uint8_t id)
+{
+    return id < 2u ? last_result[id] : TLE_ARGUMENT_ERROR;
+}
 
 /* 两颗编码器共用SPI2；PA4/PB1分别片选，未选中时保持高。 */
 void TLE5012B_BusInit(void)
 {
     GPIO_InitTypeDef gpio;
     SPI_InitTypeDef spi;
+    SystemCoreClockUpdate();
+    CycleCounter_Enable(); /* 对齐阶段也需要2us间隔，不清零公共CYCCNT。 */
+    last_result[0] = last_result[1] = TLE_OK;
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB |
                           RCC_APB2Periph_AFIO, ENABLE);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_SPI2, ENABLE);
@@ -50,10 +61,12 @@ void TLE5012B_BusInit(void)
     Delay_ms(10u);
 }
 
-/* 使用已有微秒延时，满足SSC片选及DATA换向间隔。 */
+/* 中断内不能重配主循环Delay使用的SysTick；用DWT等待2us。 */
 static void SSC_Gap(void)
 {
-    Delay_us(2);
+    uint32_t began = CycleCounter_Now();
+    uint32_t cycles = (SystemCoreClock + 499999u) / 500000u;
+    while ((uint32_t)(CycleCounter_Now() - began) < cycles) {}
 }
 
 static void CS(uint8_t id, int high)
@@ -167,6 +180,7 @@ finish:
     CS(id, 1);
     DATA_Output(0);
     SSC_Gap();
+    last_result[id] = result;
     return result;
 }
 

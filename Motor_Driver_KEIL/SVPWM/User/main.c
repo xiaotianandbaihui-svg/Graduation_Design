@@ -13,7 +13,7 @@
 
 
 volatile int8_t dir1=0,dir2=0;//标记运动方向 1：小车向前运动  0：小车向后运动
-volatile int8_t car_forward_electircal_forward_1=1,car_forward_electircal_forward_2=1;//记录车运行的方向和轮子转动的机械方向是否匹配，如果电角度增长方向对应轮子使得车前进的方向一致，那么就为1，反之为-1
+volatile int8_t car_forward_electircal_forward_1=1,car_forward_electircal_forward_2=-1;//记录车运行的方向和轮子转动的机械方向是否匹配，如果电角度增长方向对应轮子使得车前进的方向一致，那么就为1，反之为-1
 uint8_t go=0;//轮足开始运行的总开关，初始的时候为0
 
 
@@ -21,7 +21,7 @@ uint8_t go=0;//轮足开始运行的总开关，初始的时候为0
 #define CAN_Time_Out_Threshold 15//CAN超时阈值
 #define USE_DIFFERENT_PID_ARGUMENTS 0//是否使用不同的PID参数，1为使用，0为不使用
 #define Central_Driver 0
-#define Formal 1 //用来控制代码调试模式和正式模式，我比较蠢咯，这种方法也不错QWQ，主要是硬件没到，现在的工作都是“预制软件”
+#define Formal 2 //用来控制代码调试模式和正式模式，我比较蠢咯，这种方法也不错QWQ，主要是硬件没到，现在的工作都是“预制软件”
 
 
 
@@ -303,19 +303,80 @@ int main(void)
 	}
 }
 #elif (Formal==2)//测量电机转动方向和小车运动方向极性的关系，设置
+
+int main(void)
+{
+    Serial_Init();
+
+    if (!SVPWM_Init()) {
+        printf("SVPWM init failed\r\n");
+        while (1) {}
+    }
+
+    if (!SVPWM_Set(0u, 0.0f, 100u) ||
+        !SVPWM_Set(1u, 0.0f, 100u)) {
+        SVPWM_Stop(0u);
+        SVPWM_Stop(1u);
+        printf("SVPWM output failed\r\n");
+        while (1) {}
+    }
+
+    /* 设置一次后，定时器会持续输出，无需反复调用 Set。 */
+    Delay_ms(300u);
+
+    printf("Test finished\r\n");
+
+    while (1) {
+
+		
+		Delay_ms(1000);
+	}
+}
+#elif (Formal==3)
+/* 电机初始化诊断：9600波特率，8位数据、无校验、1位停止位。
+ * 仅用于电源短路已排除的板子，两轮悬空，静止上电。
+ * 复用正常初始化及0/90度对齐，输出一次报告后保持高阻。
+ * 不启动CAN、PID和电流环；复位才会重新测试。 */
+#include "current_loop.h"
+float mechanical_deg_test_1=0,mechanical_deg_test_2=0;
+uint8_t prob1=0,prob2=0;
+
 int main(void)
 {
 	Serial_Init();		//串口初始化
-	TLE5012B_BusInit();
+	TLE5012B_BusInit(); /* 先配置SPI2和两路片选，Motor_init内再检查编码器。 */
 	/*特别注意，轮子需要校准，所以请先把车子拿起来，不然很可能导致车子直接和你Say Good_Bye，你也不想他变为牢大吧！！！*/
 	if (!Motor_init()) {
 		while (1) { printf("Motor init failed\n"); Delay_ms(500); }
 	}
-	while(1)
-	{
-		if(go==1)
-		SVPWM_Update(dir1*car_forward_electircal_forward_1,dir2*car_forward_electircal_forward_2,500,500);
+	if (!MotorCurrent_Init()) Drive_Fault("Current init failed");
+	printf("will while\n");
+    while (1) {
+
+			if (MotorCurrent_GetStatus() == MOTOR_CURRENT_STOPPED) {/*电机只要是停了，就要把电机启动*/
+                if (!MotorCurrent_Start()) {
+                    printf("Current start fault: %d\n", (int)MotorCurrent_GetStatus());
+                    Drive_Fault("Current start failed");
+                }
+            }
+			MotorCurrent_SetCommand(500,-500);
+			
+			print();
+//		TLE5012B_ReadAngle(0, &mechanical_deg_test_1);
+//		TLE5012B_ReadAngle(1, &mechanical_deg_test_2);
+//		printf("%.3f,%.3f\r\n",mechanical_deg_test_1,mechanical_deg_test_2);
+//		Delay_ms(50);
+//		prob1=SVPWM_Set(0u, 0.0f, 100u);
+//		prob2=SVPWM_Set(1u, 0.0f, 100u);
+//    if (!prob1 || !prob2) {
+//        SVPWM_Stop(0u);
+//        SVPWM_Stop(1u);
+//        printf("SVPWM output failed\r\n");
+//        while (1) {}
+//    }
+		
 	}
+
 }
 #endif
 
